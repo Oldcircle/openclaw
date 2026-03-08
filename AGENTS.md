@@ -257,3 +257,14 @@
   - `node --import tsx scripts/release-check.ts`
   - `pnpm release:check`
   - `pnpm test:install:smoke` or `OPENCLAW_INSTALL_SMOKE_SKIP_NONROOT=1 pnpm test:install:smoke` for non-root smoke path.
+
+<!-- FORK: 以下内容为二次开发专属，上游同步时保留此段 -->
+
+## 二次开发上下文（Fork-only）
+
+这是 Oldcircle/openclaw 的二次开发 fork。每次打开此项目时：
+
+1. 读 `FORK.md` — 当前二开方向、分支状态、上游同步记录
+2. 读 `devlog.md` — 最近改了什么（倒序）
+3. 当前工作分支：`dev/main`（不要在 `main` 上开发）
+<!-- FORK END -->
