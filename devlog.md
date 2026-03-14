@@ -4,6 +4,78 @@
 
 ---
 
+## 2026-03-14
+
+### trace-viewer / 方案 A
+
+- 在 `extensions/trace-viewer/` 落了第一版 collector、storage、HTTP API 和基础测试
+- 在 `projects/ai/trace-viewer/STATUS.md` 统一记录多 agent 共享开发状态，避免进度文档分裂
+
+### 核心改动：每轮 LLM hook
+
+- 修改 `src/agents/pi-embedded-runner/run/attempt.ts`
+- 修改 `src/agents/pi-embedded-subscribe.ts`
+- 修改 `src/agents/pi-embedded-subscribe.handlers.*`
+- 让 `llm_input` / `llm_output` 从“每个 run 触发一次”改为“agentic loop 每轮 assistant 调用各触发一次”
+- 首轮 `llm_input.prompt` 保留 hook 注入后的完整 prompt，后续轮次从历史消息推导；若最后一条不是 user，则 prompt 为空字符串
+
+### 验证
+
+- 补了 `src/agents/pi-embedded-subscribe.subscribe-embedded-pi-session.subscribeembeddedpisession.test.ts`
+- 新增 `extensions/trace-viewer/src/collector.test.ts`
+- 新测试顺带暴露并修复了 `extensions/trace-viewer/src/collector.ts` 中 token 汇总调用写成 `this.addUsage(...)` 的 bug
+- 目标是确保同一 run 的多轮 LLM 调用能被 trace-viewer 正确落盘，而不是只保留最后一轮
+
+### 备注
+
+- 这是为了支撑 trace-viewer 的核心诊断价值，不是泛化“更多 hook 更好”
+- 下一步是用真实 Gateway/Telegram 场景验证：一个 run 是否能稳定产出多组 `llm_input` + `llm_output`
+
+---
+
+## 2026-03-13
+
+### 上游同步
+
+- 从上游同步 1465 个 commit（9d941949c → f07033ed3）
+- 跨越 3 个 release：v2026.3.8 → v2026.3.11 → v2026.3.12（当前 HEAD 为 v2026.3.13-dev）
+- 合并无冲突（仅 AGENTS.md 自动合并）
+- 重新安装依赖 + 构建成功
+
+### 上游主要变更摘要
+
+**新功能**
+
+- Control UI/Dashboard v2 全面重构（模块化视图、命令面板、移动端底部导航）
+- OpenAI GPT-5.4 / Anthropic Claude fast mode 支持
+- Ollama/vLLM/SGLang 迁移到 provider-plugin 架构
+- Kubernetes 部署支持（raw manifests + Kind）
+- Subagents `sessions_yield` 原语
+- Slack Block Kit 消息支持
+- iOS Home canvas + push relay
+- macOS chat model picker + thinking-level 持久化
+- Ollama 一键 onboarding（Local / Cloud+Local 模式）
+- Memory 多模态图片/音频索引（Gemini embedding-2-preview）
+- ACP session resume 支持
+
+**安全修复（大量）**
+
+- 设备配对改用短期 bootstrap token
+- 禁用隐式 workspace plugin 自动加载
+- WebSocket origin 校验加固
+- exec approval Unicode 逃逸防护
+- 多个 GHSA 安全公告修复（pairing scope、preauth payload、Feishu/LINE/Zalo webhook 等）
+
+**其他修复**
+
+- Kimi Coding tool call 格式修复
+- Telegram 消息去重 / 预览发送 / 轮询重启隔离
+- Windows gateway install 回退策略
+- macOS launchd restart 加固
+- 大量 channel/plugin/routing 修复
+
+---
+
 ## 2026-03-08
 
 ### 环境搭建
