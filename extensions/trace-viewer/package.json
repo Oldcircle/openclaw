@@ -1,0 +1,13 @@
+{
+  "name": "@openclaw/trace-viewer",
+  "version": "2026.3.13",
+  "private": true,
+  "description": "OpenClaw trace collector plugin for the trace-viewer app",
+  "type": "module",
+  "dependencies": {},
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

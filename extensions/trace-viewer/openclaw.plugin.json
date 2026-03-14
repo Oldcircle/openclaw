@@ -1,0 +1,10 @@
+{
+  "id": "trace-viewer",
+  "name": "Trace Viewer",
+  "description": "Collects OpenClaw agent traces and exposes a read-only viewer API.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
