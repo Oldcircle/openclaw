@@ -3,6 +3,7 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { createTraceHttpHandler } from "./src/api.js";
+import { BlobStore } from "./src/blob-store.js";
 import { createTraceCollector } from "./src/collector.js";
 import { TraceStorage } from "./src/storage.js";
 
@@ -12,11 +13,13 @@ const plugin = {
   description: "Collect OpenClaw traces and expose a read-only viewer API.",
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
+    const tracesRoot = path.join(os.homedir(), ".openclaw", "traces");
     const storage = new TraceStorage({
-      rootDir: path.join(os.homedir(), ".openclaw", "traces"),
+      rootDir: tracesRoot,
       logger: api.logger,
     });
-    const collector = createTraceCollector({ storage, logger: api.logger });
+    const blobStore = new BlobStore(path.join(tracesRoot, "blobs"));
+    const collector = createTraceCollector({ storage, blobStore, logger: api.logger });
 
     api.registerHttpRoute({
       path: "/plugins/trace-viewer",

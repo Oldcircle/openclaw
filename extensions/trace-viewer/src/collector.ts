@@ -10,13 +10,18 @@ import type {
   PluginHookToolContext,
   PluginLogger,
 } from "openclaw/plugin-sdk";
+import type { BlobStore } from "./blob-store.js";
 import { TraceStorage } from "./storage.js";
 import { previewUnknown, sanitizeUnknown, truncateText } from "./truncation.js";
 import type {
   AgentEndStep,
   ErrorStep,
+  HistoryMessageSummary,
   LlmInputStep,
   LlmOutputStep,
+  PromptSection,
+  PromptSectionCategory,
+  PromptStep,
   ToolCallStep,
   TraceDetail,
   TraceHealthResponse,
@@ -25,8 +30,10 @@ import type {
 
 type CreateCollectorParams = {
   storage: TraceStorage;
+  blobStore?: BlobStore;
   logger?: PluginLogger;
   timeoutMs?: number;
+  continuationGraceMs?: number;
 };
 
 type PromptSnapshot = {
@@ -46,13 +53,21 @@ type PendingToolCall = {
 
 type ActiveTrace = {
   detail: TraceDetail;
-  llmInputQueue: Array<{ stepId: string; at: number }>;
+  llmInputQueue: Array<{ step: LlmInputStep; at: number }>;
   pendingToolCalls: Map<string, PendingToolCall[]>;
   lastTouchedAt: number;
   nextStep: number;
 };
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
+const DEFAULT_CONTINUATION_GRACE_MS = 10 * 60 * 1000;
+const TIMEOUT_WARNING = "trace timed out before agent_end was observed";
+
+type ContinuationCandidate = {
+  trace: ActiveTrace;
+  runId: string;
+  expiresAt: number;
+};
 
 export function createTraceCollector(params: CreateCollectorParams) {
   return new TraceCollector(params);
@@ -60,16 +75,21 @@ export function createTraceCollector(params: CreateCollectorParams) {
 
 export class TraceCollector {
   private readonly storage: TraceStorage;
+  private readonly blobStore?: BlobStore;
   private readonly logger?: PluginLogger;
   private readonly timeoutMs: number;
+  private readonly continuationGraceMs: number;
   private readonly activeTraces = new Map<string, ActiveTrace>();
   private readonly sessionToRunId = new Map<string, string>();
   private readonly promptSnapshots = new Map<string, PromptSnapshot>();
+  private readonly continuationCandidates = new Map<string, ContinuationCandidate>();
 
   constructor(params: CreateCollectorParams) {
     this.storage = params.storage;
+    this.blobStore = params.blobStore;
     this.logger = params.logger;
     this.timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.continuationGraceMs = params.continuationGraceMs ?? DEFAULT_CONTINUATION_GRACE_MS;
 
     const timer = setInterval(
       () => {
@@ -97,6 +117,9 @@ export class TraceCollector {
   handleLlmInput(event: PluginHookLlmInputEvent, ctx: PluginHookAgentContext): void {
     const now = Date.now();
     const trace = this.ensureTrace(event.runId, ctx, now);
+    const systemPromptRef =
+      event.systemPrompt && this.blobStore ? this.blobStore.putSync(event.systemPrompt) : undefined;
+
     const step = this.pushStep<LlmInputStep>(trace, {
       id: this.nextStepId(trace),
       type: "llm_input",
@@ -105,11 +128,20 @@ export class TraceCollector {
       model: event.model,
       prompt: event.prompt,
       systemPrompt: event.systemPrompt,
+      systemPromptRef,
       historyMessagesCount: Array.isArray(event.historyMessages) ? event.historyMessages.length : 0,
       imagesCount: event.imagesCount,
+      derived: {
+        promptChars: event.prompt.length,
+        systemPromptChars: event.systemPrompt?.length,
+      },
+      promptSections: this.parsePromptSectionsWithBlobs(event.systemPrompt),
+      historyMessageSummaries: Array.isArray(event.historyMessages)
+        ? this.extractHistoryMessageSummariesWithBlobs(event.historyMessages)
+        : undefined,
     });
 
-    trace.llmInputQueue.push({ stepId: step.id, at: now });
+    trace.llmInputQueue.push({ step, at: now });
     trace.detail.provider = event.provider;
     trace.detail.model = event.model;
     trace.detail.status = "running";
@@ -117,17 +149,18 @@ export class TraceCollector {
 
     const promptSnapshot = this.consumePromptSnapshot(ctx);
     if (promptSnapshot) {
-      this.pushStep(trace, {
+      const promptStep = this.pushStep<PromptStep>(trace, {
         id: this.nextStepId(trace),
         type: "prompt",
         at: promptSnapshot.at,
+        durationMs: Math.max(0, now - promptSnapshot.at),
         prompt: promptSnapshot.prompt,
         messageCount: promptSnapshot.messageCount,
       });
-      trace.detail.userMessage = truncateText(promptSnapshot.prompt, 400);
+      trace.detail.userMessage = truncateText(extractUserMessage(promptStep.prompt), 400);
       trace.detail.startedAt = Math.min(trace.detail.startedAt, promptSnapshot.at);
     } else if (!trace.detail.userMessage) {
-      trace.detail.userMessage = truncateText(event.prompt, 400);
+      trace.detail.userMessage = truncateText(extractUserMessage(event.prompt), 400);
       trace.detail.warnings.push(
         "prompt snapshot missing; using llm_input.prompt as user message preview",
       );
@@ -140,11 +173,15 @@ export class TraceCollector {
     const now = Date.now();
     const trace = this.ensureTrace(event.runId, ctx, now);
     const pending = trace.llmInputQueue.shift();
+    const durationMs = pending ? Math.max(0, now - pending.at) : undefined;
+    if (pending) {
+      pending.step.durationMs = durationMs;
+    }
     const step: LlmOutputStep = {
       id: this.nextStepId(trace),
       type: "llm_output",
       at: now,
-      durationMs: pending ? Math.max(0, now - pending.at) : undefined,
+      durationMs,
       provider: event.provider,
       model: event.model,
       assistantTexts: event.assistantTexts,
@@ -234,13 +271,12 @@ export class TraceCollector {
 
   handleAgentEnd(event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext): void {
     const now = Date.now();
-    const runId = this.resolveRunId(ctx);
-    if (!runId) {
+    const runId = this.resolveRunId(ctx) ?? this.getContinuationCandidate(ctx)?.runId;
+    const trace =
+      (runId ? this.activeTraces.get(runId) : undefined) ??
+      this.getContinuationCandidate(ctx)?.trace;
+    if (!runId || !trace) {
       this.logger?.warn?.("trace-viewer: agent_end received without active run mapping");
-      return;
-    }
-    const trace = this.activeTraces.get(runId);
-    if (!trace) {
       return;
     }
 
@@ -266,10 +302,12 @@ export class TraceCollector {
       this.pushStep(trace, errorStep);
     }
 
+    removeWarning(trace.detail.warnings, TIMEOUT_WARNING);
     trace.detail.status = event.success ? "completed" : "failed";
     trace.detail.endedAt = now;
     trace.detail.durationMs = now - trace.detail.startedAt;
     this.touchTrace(trace, ctx, now);
+    this.clearContinuationCandidate(ctx, trace);
 
     void this.persistAndClose(runId, trace);
   }
@@ -280,6 +318,10 @@ export class TraceCollector {
 
   async get(traceId: string) {
     return await this.storage.getTrace(traceId);
+  }
+
+  async getBlob(hash: string): Promise<string | null> {
+    return this.blobStore?.get(hash) ?? null;
   }
 
   async health(): Promise<TraceHealthResponse> {
@@ -298,6 +340,11 @@ export class TraceCollector {
     const existing = this.activeTraces.get(runId);
     if (existing) {
       return existing;
+    }
+
+    const resumed = this.resumeTimedOutTrace(runId, ctx, now);
+    if (resumed) {
+      return resumed;
     }
 
     const traceId = `tr_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
@@ -356,6 +403,7 @@ export class TraceCollector {
       trace.detail.channelId = ctx.channelId;
     }
     this.bindSession(trace.detail.runId, ctx);
+    this.clearContinuationCandidate(ctx, trace);
   }
 
   private bindSession(runId: string, ctx: Partial<PluginHookAgentContext>): void {
@@ -407,6 +455,25 @@ export class TraceCollector {
     return snapshot;
   }
 
+  private peekPromptSnapshot(
+    ctx: Partial<PluginHookAgentContext>,
+    now: number,
+  ): PromptSnapshot | undefined {
+    const key = this.resolveSessionLookupKey(ctx);
+    if (!key) {
+      return undefined;
+    }
+    const snapshot = this.promptSnapshots.get(key);
+    if (!snapshot) {
+      return undefined;
+    }
+    if (now - snapshot.at > this.timeoutMs) {
+      this.promptSnapshots.delete(key);
+      return undefined;
+    }
+    return snapshot;
+  }
+
   private toolKey(runId: string, toolCallId: string | undefined, toolName: string): string {
     return `${runId}:${toolCallId ?? toolName}`;
   }
@@ -421,15 +488,75 @@ export class TraceCollector {
       trace.detail.status = "timed_out";
       trace.detail.endedAt = now;
       trace.detail.durationMs = now - trace.detail.startedAt;
-      trace.detail.warnings.push("trace timed out before agent_end was observed");
+      if (!trace.detail.warnings.includes(TIMEOUT_WARNING)) {
+        trace.detail.warnings.push(TIMEOUT_WARNING);
+      }
       timedOut.push({ runId, trace });
     }
 
-    await Promise.all(timedOut.map(({ runId, trace }) => this.persistAndClose(runId, trace)));
+    await Promise.all(
+      timedOut.map(async ({ runId, trace }) => {
+        await this.persistAndClose(runId, trace);
+        this.rememberContinuationCandidate(runId, trace, now);
+      }),
+    );
+  }
+
+  private parsePromptSectionsWithBlobs(systemPrompt?: string): PromptSection[] {
+    const sections = parsePromptSections(systemPrompt);
+    if (!this.blobStore || !systemPrompt) return sections;
+
+    // Re-parse with content to store blobs
+    const lines = systemPrompt.split("\n");
+    let currentStart = 0;
+    let sectionIdx = 0;
+    let inWorkspaceFile = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i]?.startsWith("## ")) continue;
+      const header = lines[i].slice(3).trim();
+      const isWorkspacePath = header.startsWith("/") || header.startsWith("~/");
+      if (inWorkspaceFile && isWorkspacePath) continue;
+
+      const content = lines.slice(currentStart, i).join("\n").trim();
+      if (content && sectionIdx < sections.length) {
+        sections[sectionIdx].contentRef = this.blobStore.putSync(content);
+        sectionIdx++;
+      }
+      currentStart = i + 1;
+      inWorkspaceFile = isWorkspacePath;
+    }
+
+    const lastContent = lines.slice(currentStart).join("\n").trim();
+    if (lastContent && sectionIdx < sections.length) {
+      sections[sectionIdx].contentRef = this.blobStore.putSync(lastContent);
+    }
+
+    return sections;
+  }
+
+  private extractHistoryMessageSummariesWithBlobs(
+    historyMessages: unknown[],
+  ): HistoryMessageSummary[] {
+    const summaries = extractHistoryMessageSummaries(historyMessages);
+    if (!this.blobStore) return summaries;
+
+    for (let i = 0; i < historyMessages.length; i++) {
+      const msg = historyMessages[i] as Record<string, unknown>;
+      const content = msg.content ?? msg;
+      const serialized = typeof content === "string" ? content : JSON.stringify(content);
+      if (summaries[i]) {
+        summaries[i].contentRef = this.blobStore.putSync(serialized);
+      }
+    }
+    return summaries;
   }
 
   private async persistAndClose(runId: string, trace: ActiveTrace): Promise<void> {
     try {
+      if (this.blobStore) {
+        await this.blobStore.flushPending();
+      }
       await this.storage.writeTrace(trace.detail);
     } catch (error) {
       this.logger?.error?.(`trace-viewer: failed to write trace ${runId}: ${String(error)}`);
@@ -443,6 +570,100 @@ export class TraceCollector {
     if (trace.detail.sessionKey) {
       this.sessionToRunId.delete(`sessionKey:${trace.detail.sessionKey}`);
     }
+  }
+
+  private resumeTimedOutTrace(
+    runId: string,
+    ctx: Partial<PluginHookAgentContext>,
+    now: number,
+  ): ActiveTrace | undefined {
+    this.pruneContinuationCandidates(now);
+    if (this.peekPromptSnapshot(ctx, now)) {
+      return undefined;
+    }
+
+    const candidate = this.getContinuationCandidate(ctx);
+    if (!candidate) {
+      return undefined;
+    }
+
+    const trace = candidate.trace;
+    const previousRunId = candidate.runId;
+
+    trace.detail.status = "running";
+    trace.detail.endedAt = undefined;
+    trace.detail.durationMs = undefined;
+    trace.detail.runId = runId;
+    trace.lastTouchedAt = now;
+    removeWarning(trace.detail.warnings, TIMEOUT_WARNING);
+    trace.detail.warnings.push(
+      `trace resumed after timeout; continuing under runId ${runId} (previous runId ${previousRunId})`,
+    );
+
+    this.activeTraces.set(runId, trace);
+    this.bindSession(runId, ctx);
+    this.clearContinuationCandidate(ctx, trace);
+    return trace;
+  }
+
+  private rememberContinuationCandidate(runId: string, trace: ActiveTrace, now: number): void {
+    const candidate: ContinuationCandidate = {
+      trace,
+      runId,
+      expiresAt: now + this.continuationGraceMs,
+    };
+    for (const key of this.getSessionLookupKeys(trace.detail)) {
+      this.continuationCandidates.set(key, candidate);
+    }
+  }
+
+  private getContinuationCandidate(
+    ctx: Partial<PluginHookAgentContext>,
+  ): ContinuationCandidate | undefined {
+    for (const key of this.getSessionLookupKeys(ctx)) {
+      const candidate = this.continuationCandidates.get(key);
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return undefined;
+  }
+
+  private clearContinuationCandidate(
+    ctx: Partial<PluginHookAgentContext>,
+    trace?: ActiveTrace,
+  ): void {
+    for (const key of this.getSessionLookupKeys(ctx)) {
+      const candidate = this.continuationCandidates.get(key);
+      if (!candidate) {
+        continue;
+      }
+      if (trace && candidate.trace !== trace) {
+        continue;
+      }
+      this.continuationCandidates.delete(key);
+    }
+  }
+
+  private pruneContinuationCandidates(now: number): void {
+    for (const [key, candidate] of this.continuationCandidates) {
+      if (candidate.expiresAt <= now) {
+        this.continuationCandidates.delete(key);
+      }
+    }
+  }
+
+  private getSessionLookupKeys(
+    ctx: Partial<Pick<PluginHookAgentContext, "sessionId" | "sessionKey">>,
+  ): string[] {
+    const keys: string[] = [];
+    if (ctx.sessionId) {
+      keys.push(`sessionId:${ctx.sessionId}`);
+    }
+    if (ctx.sessionKey) {
+      keys.push(`sessionKey:${ctx.sessionKey}`);
+    }
+    return keys;
   }
 }
 
@@ -471,4 +692,134 @@ function lastNonEmpty(values: string[]): string | undefined {
     }
   }
   return undefined;
+}
+
+function removeWarning(warnings: string[], target: string): void {
+  const index = warnings.indexOf(target);
+  if (index >= 0) {
+    warnings.splice(index, 1);
+  }
+}
+
+function categorize(name: string): PromptSectionCategory {
+  const lower = name.toLowerCase();
+  if (lower.includes("tool") || lower.includes("mcp")) return "tooling";
+  if (lower.includes("safe") || lower.includes("guard")) return "safety";
+  if (lower.includes("skill")) return "skills";
+  if (
+    lower.includes("messag") ||
+    lower.includes("reaction") ||
+    lower.includes("silent") ||
+    lower.includes("heartbeat")
+  )
+    return "messaging";
+  if (lower.includes("memory")) return "memory";
+  if (
+    name.startsWith("/") ||
+    name.startsWith("~/") ||
+    lower.includes("workspace") ||
+    lower.includes("documentation")
+  )
+    return "workspace";
+  return "system";
+}
+
+function parsePromptSections(systemPrompt?: string): PromptSection[] {
+  if (!systemPrompt) return [];
+  const lines = systemPrompt.split("\n");
+  const sections: PromptSection[] = [];
+  let currentName = "(preamble)";
+  let currentStart = 0;
+  let inWorkspaceFile = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i]?.startsWith("## ")) continue;
+    const header = lines[i].slice(3).trim();
+    const isWorkspacePath = header.startsWith("/") || header.startsWith("~/");
+
+    // Workspace file sub-headers (paths) are grouped under the workspace section
+    if (inWorkspaceFile && isWorkspacePath) continue;
+
+    const content = lines.slice(currentStart, i).join("\n").trim();
+    if (content) {
+      sections.push({
+        name: currentName,
+        chars: content.length,
+        category: categorize(currentName),
+      });
+    }
+    currentName = header;
+    currentStart = i + 1;
+    inWorkspaceFile = isWorkspacePath;
+  }
+
+  const lastContent = lines.slice(currentStart).join("\n").trim();
+  if (lastContent) {
+    sections.push({
+      name: currentName,
+      chars: lastContent.length,
+      category: categorize(currentName),
+    });
+  }
+  return sections;
+}
+
+function extractHistoryMessageSummaries(historyMessages: unknown[]): HistoryMessageSummary[] {
+  return historyMessages.map((msg) => {
+    const m = msg as Record<string, unknown>;
+    const role = typeof m.role === "string" ? m.role : "unknown";
+    const content = m.content ?? m;
+    const chars = typeof content === "string" ? content.length : JSON.stringify(content).length;
+
+    // Detect tool_calls in assistant messages
+    const hasToolCall =
+      role === "assistant" &&
+      (Array.isArray(m.tool_calls) ||
+        (Array.isArray(m.content) &&
+          (m.content as unknown[]).some(
+            (block) =>
+              typeof block === "object" &&
+              block !== null &&
+              (block as Record<string, unknown>).type === "tool_use",
+          )));
+
+    // Detect tool results
+    const hasToolResult =
+      role === "user" &&
+      Array.isArray(m.content) &&
+      (m.content as unknown[]).some(
+        (block) =>
+          typeof block === "object" &&
+          block !== null &&
+          (block as Record<string, unknown>).type === "tool_result",
+      );
+
+    return {
+      role,
+      chars,
+      ...(hasToolCall ? { hasToolCall: true } : {}),
+      ...(hasToolResult ? { hasToolResult: true } : {}),
+    };
+  });
+}
+
+function extractUserMessage(raw?: string): string {
+  if (!raw) {
+    return "";
+  }
+  const parts = raw.split(/\n\n(?=\S)/);
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]?.trim();
+    if (!part) {
+      continue;
+    }
+    if (
+      !part.startsWith("Conversation info") &&
+      !part.startsWith("Sender") &&
+      !part.startsWith("```")
+    ) {
+      return part;
+    }
+  }
+  return raw.trim();
 }

@@ -4,20 +4,53 @@ export type PromptStep = {
   id: string;
   type: "prompt";
   at: number;
+  durationMs?: number;
   prompt: string;
   messageCount: number;
+};
+
+export type PromptSectionCategory =
+  | "tooling"
+  | "safety"
+  | "workspace"
+  | "skills"
+  | "messaging"
+  | "memory"
+  | "system";
+
+export type PromptSection = {
+  name: string;
+  chars: number;
+  category: PromptSectionCategory;
+  contentRef?: string;
+};
+
+export type HistoryMessageSummary = {
+  role: string;
+  chars: number;
+  hasToolCall?: boolean;
+  hasToolResult?: boolean;
+  contentRef?: string;
 };
 
 export type LlmInputStep = {
   id: string;
   type: "llm_input";
   at: number;
+  durationMs?: number;
   provider: string;
   model: string;
   prompt: string;
   systemPrompt?: string;
   historyMessagesCount: number;
   imagesCount: number;
+  systemPromptRef?: string;
+  derived?: {
+    promptChars: number;
+    systemPromptChars?: number;
+  };
+  promptSections?: PromptSection[];
+  historyMessageSummaries?: HistoryMessageSummary[];
 };
 
 export type LlmOutputStep = {

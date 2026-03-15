@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-03-15
+
+### BlobStore 内容寻址存储
+
+- 新建 `extensions/trace-viewer/src/blob-store.ts`：SHA-256 内容寻址存储，`putSync()` 同步缓冲 + `flushPending()` 批量写盘
+- 新建 `extensions/trace-viewer/src/blob-store.test.ts`：7 个单元测试
+- 修改 `extensions/trace-viewer/src/types.ts`：`PromptSection` / `HistoryMessageSummary` 增加 `contentRef?`，`LlmInputStep` 增加 `systemPromptRef?`
+- 修改 `extensions/trace-viewer/src/collector.ts`：集成 BlobStore，system prompt / prompt sections / history messages 内容全部存为 blob，`persistAndClose` 先 flush blobs 再写 trace
+- 修改 `extensions/trace-viewer/src/api.ts`：新增 `GET /plugins/trace-viewer/blobs/:hash` 端点
+- 修改 `extensions/trace-viewer/index.ts`：初始化 BlobStore 传给 collector
+- 修改 `extensions/trace-viewer/src/collector.test.ts`：新增 2 个 blob 集成测试
+
+### 目的
+
+解决 trace-viewer 侧边面板两个问题：
+
+1. 历史消息无完整内容（只有摘要，点击显示"完整内容暂不可用"）
+2. promptSections 无 content（只有 name/chars/category）
+
+直接保存完整内容会导致大量重复（system prompt 每轮重复，历史消息累积重复）。采用内容寻址去重存储后，同一内容只存一份 blob。
+
+### 验证
+
+- 真实 Telegram 消息测试：128 blob 文件，4 轮 LLM 的 systemPromptRef 相同（去重生效）
+- blob API 正常返回内容
+- 所有 12 个测试通过（7 blob-store + 5 collector）
+
+### timeout / 孤儿 trace 修复
+
+- 修改 `extensions/trace-viewer/src/collector.ts`：为超时 trace 增加 continuation 续接窗口，允许同一 session 在新 `runId` 下继续归并到原 trace
+- 修改 `extensions/trace-viewer/src/collector.ts`：late `agent_end` 到达时，会把原 `timed_out` trace 升级成最终状态，而不是永久停在超时
+- 修改 `extensions/trace-viewer/src/collector.test.ts`：新增 timeout 后跨 `runId` 续接、late `agent_end` 收口回归测试
+
+### 目的
+
+解决 trace-viewer 中的 `(empty)` 孤儿 trace 和“明明最终完成却停在 timed_out”的问题。
+
+### 验证
+
+- 定向测试通过：`pnpm exec vitest run extensions/trace-viewer/src/collector.test.ts extensions/trace-viewer/src/storage.test.ts`
+- 真实本地落盘验证：长任务 trace 最终写回 `completed`，不再继续生成新的 `(empty)` 孤儿 trace
+
+---
+
 ## 2026-03-14
 
 ### trace-viewer / 方案 A

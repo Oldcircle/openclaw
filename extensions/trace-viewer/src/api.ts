@@ -50,6 +50,25 @@ export function createTraceHttpHandler(params: CreateTraceHttpHandlerParams) {
         return true;
       }
 
+      if (url.pathname.startsWith("/plugins/trace-viewer/blobs/")) {
+        if (!isGetLike(req.method)) {
+          respondText(res, 405, "Method not allowed");
+          return true;
+        }
+        const hash = url.pathname.split("/").filter(Boolean)[3];
+        if (!hash || !/^[a-f0-9]{64}$/.test(hash)) {
+          respondText(res, 400, "Invalid blob hash");
+          return true;
+        }
+        const content = await params.collector.getBlob(hash);
+        if (content == null) {
+          respondText(res, 404, "Blob not found");
+          return true;
+        }
+        respondText(res, 200, content);
+        return true;
+      }
+
       if (url.pathname.startsWith("/plugins/trace-viewer/traces/")) {
         if (!isGetLike(req.method)) {
           respondText(res, 405, "Method not allowed");
