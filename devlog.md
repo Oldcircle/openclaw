@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-03-16
+
+### trace-viewer：active trace live 暴露
+
+- 修改 `extensions/trace-viewer/src/storage.ts`：新增 `listMatchingTraces()`，把“读取并过滤 summary”与“分页”拆开
+- 修改 `extensions/trace-viewer/src/collector.ts`
+  - `list()` 现在会合并内存中的 active trace 与已落盘 trace
+  - `get()` 现在支持读取 running / draft 中的 live detail
+  - terminal trace 在真正持久化完成前不再通过 live 通道返回，避免刚完成时列表先看到 `completed` 但 blob 仍未 flush 的短暂不一致
+- 修改 `extensions/trace-viewer/src/collector.test.ts`
+  - 新增“trace 在持久化前即可被 list/get 看到”的回归测试
+
+### 目的
+
+解决 Prompt Debugger 联调时的核心体验问题：在 `Control` 页面发送消息后，trace-viewer 列表和详情页无法及时看到 running 中的 trace，必须等最终落盘才出现。
+
+### 验证
+
+- `pnpm exec vitest run extensions/trace-viewer/src/collector.test.ts extensions/trace-viewer/src/storage.test.ts`
+- 通过（2 个测试文件，9 个测试）
+
 ## 2026-03-15
 
 ### BlobStore 内容寻址存储

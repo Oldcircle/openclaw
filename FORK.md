@@ -32,12 +32,15 @@ upstream/main   →   main（只跟进，禁止直接在此开发）
 
 - `extensions/trace-viewer`：基于插件系统实现 trace 采集与可视化接口
 - `src/agents/pi-embedded-*`：补齐 agentic loop 每轮 `llm_input` / `llm_output` hook，支撑 trace-viewer 看到真实多轮 LLM 过程
+- `src/agents/workspace*` / `src/agents/bootstrap-files.ts` / `src/agents/system-prompt*`：把当前固定文件槽位式提示词组织，升级为资产化系统（Agent Card / Context Book / Prompt Profile，详见 `PLAN.md`）
 
 当前原则：
 
 - 能用插件解决的，优先放在 `extensions/trace-viewer`
 - 只有在现有 hook 粒度不足时，才改核心运行时
 - 核心改动必须补测试，并在 `devlog.md` 记录原因
+- 新提示词系统优先借鉴 SillyTavern 的资产模型（角色卡 / 世界书 / 预设），不照搬其 jailbreak 体系
+- Prompt Profile 可以表达工具偏好和缩减范围，但不能突破 OpenClaw 现有硬权限边界
 
 ## 当前活跃分支
 
