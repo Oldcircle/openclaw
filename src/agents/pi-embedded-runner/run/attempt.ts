@@ -2360,6 +2360,8 @@ export async function runEmbeddedAttempt(
         const contextBookPromptContext = await resolveContextBookPromptContext({
           workspaceDir: params.workspaceDir,
           sessionKey: params.sessionKey,
+          agentId: hookAgentId,
+          channelId: params.messageChannel ?? params.messageProvider ?? undefined,
           messages: activeSession.messages,
           warn: (message) => log.warn(`context-books: ${message}`),
         });

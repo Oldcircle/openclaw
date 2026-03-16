@@ -87,6 +87,7 @@ export async function resolveBootstrapFilesForRun(params: {
   const contextBookFiles = await loadContextBookBootstrapFiles({
     workspaceDir: params.workspaceDir,
     sessionKey,
+    agentId: params.agentId,
     contextMode: params.contextMode,
     runKind: params.runKind,
     warn: params.warn,

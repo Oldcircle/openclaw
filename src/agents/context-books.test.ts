@@ -179,4 +179,168 @@ describe("loadContextBookBootstrapFiles", () => {
       appended.indexOf("[Context Book: Final reminder]"),
     );
   });
+
+  it("filters prompt context by channel, agentId, and session kind", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "filters.yaml"),
+      [
+        "entries:",
+        "  - name: Telegram main default",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    channels: [telegram]",
+        "    agentIds: [main]",
+        "    sessionKinds: [default]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      matched",
+        "  - name: Discord only",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    channels: [discord]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      should not match",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite build issue" }],
+      sessionKey: "agent:main:main",
+      agentId: "main",
+      channelId: "telegram",
+    });
+
+    expect(result.appendSystemContext).toContain("[Context Book: Telegram main default]");
+    expect(result.appendSystemContext).not.toContain("[Context Book: Discord only]");
+    expect(result.matchedEntryNames).toEqual(["Telegram main default"]);
+  });
+
+  it("filters always-on bootstrap entries by agentId and session kind", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "bootstrap-filters.yaml"),
+      [
+        "entries:",
+        "  - name: Main only",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    agentIds: [main]",
+        "    sessionKinds: [default]",
+        "    position: before_context",
+        "    content: |",
+        "      included",
+        "  - name: Subagent only",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    agentIds: [worker]",
+        "    sessionKinds: [subagent]",
+        "    position: before_context",
+        "    content: |",
+        "      excluded",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const files = await loadContextBookBootstrapFiles({
+      workspaceDir,
+      sessionKey: "agent:main:main",
+      agentId: "main",
+    });
+
+    expect(files.map((file) => file.name)).toEqual(["CONTEXT_BOOK:Main only"]);
+  });
+
+  it("supports secondary keyword logic for prompt matching", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "secondary.yaml"),
+      [
+        "entries:",
+        "  - name: Vite config helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    secondaryKeywords: [config, build]",
+        "    secondaryLogic: AND_ANY",
+        "    position: tail_reminder",
+        "    content: |",
+        "      inspect config and build scripts",
+        "  - name: Vite no test helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    secondaryKeywords: [test]",
+        "    secondaryLogic: NOT_ANY",
+        "    position: tail_reminder",
+        "    content: |",
+        "      this should only match when tests are not mentioned",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const matched = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite config problem in build pipeline" }],
+    });
+    expect(matched.appendSystemContext).toContain("[Context Book: Vite config helper]");
+    expect(matched.appendSystemContext).toContain("[Context Book: Vite no test helper]");
+
+    const excluded = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite test config issue" }],
+    });
+    expect(excluded.appendSystemContext).toContain("[Context Book: Vite config helper]");
+    expect(excluded.appendSystemContext).not.toContain("[Context Book: Vite no test helper]");
+  });
+
+  it("filters prompt context by chat type", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "chat-types.yaml"),
+      [
+        "entries:",
+        "  - name: Group helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    chatTypes: [group]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      only for group chats",
+        "  - name: Direct helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    chatTypes: [direct]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      only for direct chats",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const groupResult = await resolveContextBookPromptContext({
+      workspaceDir,
+      sessionKey: "agent:main:telegram:group:team-room",
+      messages: [{ role: "user", content: "vite issue" }],
+    });
+    expect(groupResult.appendSystemContext).toContain("[Context Book: Group helper]");
+    expect(groupResult.appendSystemContext).not.toContain("[Context Book: Direct helper]");
+
+    const directResult = await resolveContextBookPromptContext({
+      workspaceDir,
+      sessionKey: "agent:main:direct:user-1",
+      messages: [{ role: "user", content: "vite issue" }],
+    });
+    expect(directResult.appendSystemContext).toContain("[Context Book: Direct helper]");
+    expect(directResult.appendSystemContext).not.toContain("[Context Book: Group helper]");
+  });
 });

@@ -4,6 +4,8 @@ import path from "node:path";
 import YAML from "yaml";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
+import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
+import { deriveSessionChatType, type SessionKeyChatType } from "../sessions/session-key-utils.js";
 import { joinPresentTextSegments } from "../shared/text/join-segments.js";
 import { resolveUserPath } from "../utils.js";
 import type { BootstrapContextMode, BootstrapContextRunKind } from "./bootstrap-files.js";
@@ -18,6 +20,8 @@ const SUPPORTED_BOOTSTRAP_POSITIONS = new Set(["before_context", "after_context"
 const SUPPORTED_PROMPT_POSITIONS = new Set(["before_context", "after_context", "tail_reminder"]);
 
 type ContextBookPosition = "before_context" | "after_context" | "tail_reminder";
+type ContextBookSessionKind = "default" | "cron" | "subagent";
+type ContextBookSecondaryLogic = "AND_ANY" | "AND_ALL" | "NOT_ANY" | "NOT_ALL";
 
 type RawContextBookDocument =
   | {
@@ -34,6 +38,12 @@ type NormalizedContextBookEntry = {
   alwaysActive: boolean;
   ignoreBudget: boolean;
   keywords: string[];
+  secondaryKeywords: string[];
+  secondaryLogic: ContextBookSecondaryLogic;
+  agentIds: string[];
+  channels: string[];
+  chatTypes: SessionKeyChatType[];
+  sessionKinds: ContextBookSessionKind[];
   position: ContextBookPosition;
   sourcePath: string;
   sourceIndex: number;
@@ -64,6 +74,37 @@ function parseStringArray(value: unknown): string[] {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item.length > 0);
+}
+
+function parseSessionKinds(value: unknown): ContextBookSessionKind[] {
+  return parseStringArray(value)
+    .map((item) => item.toLowerCase())
+    .filter(
+      (item): item is ContextBookSessionKind =>
+        item === "default" || item === "cron" || item === "subagent",
+    );
+}
+
+function parseChatTypes(value: unknown): SessionKeyChatType[] {
+  return parseStringArray(value)
+    .map((item) => item.toLowerCase())
+    .filter(
+      (item): item is SessionKeyChatType =>
+        item === "direct" || item === "group" || item === "channel" || item === "unknown",
+    );
+}
+
+function parseSecondaryLogic(value: unknown): ContextBookSecondaryLogic {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (
+    normalized === "AND_ANY" ||
+    normalized === "AND_ALL" ||
+    normalized === "NOT_ANY" ||
+    normalized === "NOT_ALL"
+  ) {
+    return normalized;
+  }
+  return "AND_ANY";
 }
 
 function normalizeEntryName(rawName: unknown, sourcePath: string, index: number): string {
@@ -139,6 +180,12 @@ function extractEntries(
     const alwaysActive = parseBoolean(rawEntry.alwaysActive, false);
     const ignoreBudget = parseBoolean(rawEntry.ignoreBudget, false);
     const keywords = parseStringArray(rawEntry.keywords);
+    const secondaryKeywords = parseStringArray(rawEntry.secondaryKeywords);
+    const secondaryLogic = parseSecondaryLogic(rawEntry.secondaryLogic);
+    const agentIds = parseStringArray(rawEntry.agentIds).map((item) => item.toLowerCase());
+    const channels = parseStringArray(rawEntry.channels).map((item) => item.toLowerCase());
+    const chatTypes = parseChatTypes(rawEntry.chatTypes);
+    const sessionKinds = parseSessionKinds(rawEntry.sessionKinds);
     if (!enabled || (!alwaysActive && keywords.length === 0)) {
       continue;
     }
@@ -167,6 +214,12 @@ function extractEntries(
       alwaysActive,
       ignoreBudget,
       keywords,
+      secondaryKeywords,
+      secondaryLogic,
+      agentIds,
+      channels,
+      chatTypes,
+      sessionKinds,
       position,
       sourcePath,
       sourceIndex: index,
@@ -321,7 +374,27 @@ function matchesEntryKeywords(entry: NormalizedContextBookEntry, haystack: strin
   if (!haystack || entry.keywords.length === 0) {
     return false;
   }
-  return entry.keywords.some((keyword) => haystack.includes(keyword.toLowerCase()));
+  const primaryMatched = entry.keywords.some((keyword) => haystack.includes(keyword.toLowerCase()));
+  if (!primaryMatched) {
+    return false;
+  }
+  if (entry.secondaryKeywords.length === 0) {
+    return true;
+  }
+  const secondaryMatches = entry.secondaryKeywords.map((keyword) =>
+    haystack.includes(keyword.toLowerCase()),
+  );
+  switch (entry.secondaryLogic) {
+    case "AND_ALL":
+      return secondaryMatches.every(Boolean);
+    case "NOT_ANY":
+      return secondaryMatches.every((matched) => !matched);
+    case "NOT_ALL":
+      return !secondaryMatches.every(Boolean);
+    case "AND_ANY":
+    default:
+      return secondaryMatches.some(Boolean);
+  }
 }
 
 function shouldInjectViaPromptContext(
@@ -332,6 +405,65 @@ function shouldInjectViaPromptContext(
     return true;
   }
   return matchesEntryKeywords(entry, haystack);
+}
+
+function resolveContextBookSessionKind(sessionKey: string | undefined): ContextBookSessionKind {
+  if (isSubagentSessionKey(sessionKey)) {
+    return "subagent";
+  }
+  if (isCronSessionKey(sessionKey)) {
+    return "cron";
+  }
+  return "default";
+}
+
+function matchesOptionalFilter(filterValues: string[], actualValue: string | undefined): boolean {
+  if (filterValues.length === 0) {
+    return true;
+  }
+  const normalized = actualValue?.trim().toLowerCase();
+  return Boolean(normalized) && filterValues.includes(normalized);
+}
+
+function matchesSessionKindFilter(
+  filterValues: ContextBookSessionKind[],
+  actualValue: ContextBookSessionKind,
+): boolean {
+  if (filterValues.length === 0) {
+    return true;
+  }
+  return filterValues.includes(actualValue);
+}
+
+function matchesChatTypeFilter(
+  filterValues: SessionKeyChatType[],
+  actualValue: SessionKeyChatType,
+): boolean {
+  if (filterValues.length === 0) {
+    return true;
+  }
+  return filterValues.includes(actualValue);
+}
+
+function matchesEntryScope(params: {
+  entry: NormalizedContextBookEntry;
+  sessionKey?: string;
+  agentId?: string;
+  channelId?: string;
+}): boolean {
+  const agentId =
+    params.agentId?.trim().toLowerCase() ??
+    resolveAgentIdFromSessionKey(params.sessionKey).trim().toLowerCase();
+  const channelId = params.channelId?.trim().toLowerCase();
+  const sessionKind = resolveContextBookSessionKind(params.sessionKey);
+  const chatType = deriveSessionChatType(params.sessionKey);
+
+  return (
+    matchesOptionalFilter(params.entry.agentIds, agentId) &&
+    matchesOptionalFilter(params.entry.channels, channelId) &&
+    matchesChatTypeFilter(params.entry.chatTypes, chatType) &&
+    matchesSessionKindFilter(params.entry.sessionKinds, sessionKind)
+  );
 }
 
 function buildPromptContextSection(
@@ -380,6 +512,7 @@ function selectPromptEntriesWithinBudget(params: {
 export async function loadContextBookBootstrapFiles(params: {
   workspaceDir: string;
   sessionKey?: string;
+  agentId?: string;
   contextMode?: BootstrapContextMode;
   runKind?: BootstrapContextRunKind;
   warn?: (message: string) => void;
@@ -394,7 +527,16 @@ export async function loadContextBookBootstrapFiles(params: {
   });
 
   return entries
-    .filter((entry) => entry.alwaysActive && SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position))
+    .filter(
+      (entry) =>
+        entry.alwaysActive &&
+        SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position) &&
+        matchesEntryScope({
+          entry,
+          sessionKey: params.sessionKey,
+          agentId: params.agentId,
+        }),
+    )
     .map((entry) => ({
       name: entry.syntheticName,
       path: entry.syntheticPath,
@@ -407,6 +549,8 @@ export async function resolveContextBookPromptContext(params: {
   workspaceDir: string;
   messages: unknown[];
   sessionKey?: string;
+  agentId?: string;
+  channelId?: string;
   contextMode?: BootstrapContextMode;
   runKind?: BootstrapContextRunKind;
   maxChars?: number;
@@ -426,7 +570,15 @@ export async function resolveContextBookPromptContext(params: {
 
   const haystack = buildMessageKeywordHaystack(params.messages);
   const matched = selectPromptEntriesWithinBudget({
-    entries: entries.filter((entry) => shouldInjectViaPromptContext(entry, haystack)),
+    entries: entries.filter(
+      (entry) =>
+        matchesEntryScope({
+          entry,
+          sessionKey: params.sessionKey,
+          agentId: params.agentId,
+          channelId: params.channelId,
+        }) && shouldInjectViaPromptContext(entry, haystack),
+    ),
     maxChars: params.maxChars ?? DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS,
     warn: params.warn,
   });
