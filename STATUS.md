@@ -31,7 +31,7 @@
 - [x] P1: 扩展到基础预算控制
 - [x] P1: 扩展到 `agentIds/channels/chatTypes/sessionKinds` 过滤
 - [x] P1: 扩展到 `at_depth`
-- [ ] 把现有 bootstrap 文件清理项并入 P1 的前置整理
+- [x] 把现有 bootstrap 文件清理项并入 P1 的前置整理
 - [ ] 保留工具描述增强 / 尾部提醒作为 P4 的局部先行项
 - [ ] P2/P3: 待 P1 稳定后再进入实现
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
@@ -59,6 +59,10 @@
   - 常驻 `Context Book` 条目已接入 bootstrap 管线
 - `src/agents/pi-embedded-runner/run/attempt.ts`
   - 关键词触发条目已接入运行期 prompt build，按消息内容动态注入 system context
+  - `at_depth` 条目会在本轮 prompt 前临时插入历史并在完成后剥离，不污染持久 session
+- `src/agents/workspace.ts`
+  - onboarding 完成后不再为缺失的 `BOOTSTRAP.md` 注入 missing marker
+  - 当 workspace 已有 `context-books/` 资产时，不再为缺失的 `SOUL.md / IDENTITY.md / USER.md` 注入 missing marker，减少旧槽位噪音
 
 - `extensions/trace-viewer/src/collector.ts`
   - `list()` 现在会把 active trace 和已落盘 trace 合并返回

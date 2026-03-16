@@ -31,9 +31,11 @@ export const DEFAULT_HEARTBEAT_FILENAME = "HEARTBEAT.md";
 export const DEFAULT_BOOTSTRAP_FILENAME = "BOOTSTRAP.md";
 export const DEFAULT_MEMORY_FILENAME = "MEMORY.md";
 export const DEFAULT_MEMORY_ALT_FILENAME = "memory.md";
+export const DEFAULT_CONTEXT_BOOKS_DIRNAME = "context-books";
 const WORKSPACE_STATE_DIRNAME = ".openclaw";
 const WORKSPACE_STATE_FILENAME = "workspace-state.json";
 const WORKSPACE_STATE_VERSION = 1;
+const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 
 const workspaceTemplateCache = new Map<string, Promise<string>>();
 let gitAvailabilityPromise: Promise<boolean> | null = null;
@@ -495,8 +497,43 @@ async function resolveMemoryBootstrapEntries(
   return deduped;
 }
 
+async function workspaceHasContextBookAssets(resolvedDir: string): Promise<boolean> {
+  try {
+    const entries = await fs.readdir(path.join(resolvedDir, DEFAULT_CONTEXT_BOOKS_DIRNAME), {
+      withFileTypes: true,
+    });
+    return entries.some(
+      (entry) =>
+        entry.isFile() && CONTEXT_BOOK_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    return false;
+  }
+}
+
+async function resolveSuppressedMissingBootstrapNames(
+  resolvedDir: string,
+): Promise<Set<WorkspaceBootstrapFileName>> {
+  const suppressed = new Set<WorkspaceBootstrapFileName>();
+  const state = await readWorkspaceOnboardingStateForDir(resolvedDir);
+  if (state.onboardingCompletedAt?.trim()) {
+    suppressed.add(DEFAULT_BOOTSTRAP_FILENAME);
+  }
+
+  if (await workspaceHasContextBookAssets(resolvedDir)) {
+    suppressed.add(DEFAULT_SOUL_FILENAME);
+    suppressed.add(DEFAULT_IDENTITY_FILENAME);
+    suppressed.add(DEFAULT_USER_FILENAME);
+  }
+  return suppressed;
+}
+
 export async function loadWorkspaceBootstrapFiles(dir: string): Promise<WorkspaceBootstrapFile[]> {
   const resolvedDir = resolveUserPath(dir);
+  const suppressedMissingNames = await resolveSuppressedMissingBootstrapNames(resolvedDir);
 
   const entries: Array<{
     name: WorkspaceBootstrapFileName;
@@ -548,6 +585,9 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
         missing: false,
       });
     } else {
+      if (suppressedMissingNames.has(entry.name)) {
+        continue;
+      }
       result.push({ name: entry.name, path: entry.filePath, missing: true });
     }
   }

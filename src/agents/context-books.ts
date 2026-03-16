@@ -10,9 +10,9 @@ import { deriveSessionChatType, type SessionKeyChatType } from "../sessions/sess
 import { joinPresentTextSegments } from "../shared/text/join-segments.js";
 import { resolveUserPath } from "../utils.js";
 import type { BootstrapContextMode, BootstrapContextRunKind } from "./bootstrap-files.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
+import { DEFAULT_CONTEXT_BOOKS_DIRNAME, type WorkspaceBootstrapFile } from "./workspace.js";
 
-export const CONTEXT_BOOKS_DIRNAME = "context-books";
+export const CONTEXT_BOOKS_DIRNAME = DEFAULT_CONTEXT_BOOKS_DIRNAME;
 
 const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const CONTEXT_BOOK_MAX_FILE_BYTES = 512 * 1024;

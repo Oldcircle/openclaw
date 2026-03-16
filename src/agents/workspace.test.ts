@@ -9,6 +9,7 @@ import {
   DEFAULT_IDENTITY_FILENAME,
   DEFAULT_MEMORY_ALT_FILENAME,
   DEFAULT_MEMORY_FILENAME,
+  DEFAULT_SOUL_FILENAME,
   DEFAULT_TOOLS_FILENAME,
   DEFAULT_USER_FILENAME,
   ensureAgentWorkspace,
@@ -189,6 +190,35 @@ describe("loadWorkspaceBootstrapFiles", () => {
 
     const files = await loadWorkspaceBootstrapFiles(tempDir);
     expect(getMemoryEntries(files)).toHaveLength(0);
+  });
+
+  it("omits BOOTSTRAP.md missing markers after onboarding is completed", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
+    await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_IDENTITY_FILENAME, content: "custom" });
+    await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_USER_FILENAME, content: "custom" });
+    await fs.unlink(path.join(tempDir, DEFAULT_BOOTSTRAP_FILENAME));
+    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
+
+    const files = await loadWorkspaceBootstrapFiles(tempDir);
+    expect(files.some((file) => file.name === DEFAULT_BOOTSTRAP_FILENAME)).toBe(false);
+  });
+
+  it("omits missing legacy persona files when context-books assets exist", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_AGENTS_FILENAME, content: "agents" });
+    await fs.mkdir(path.join(tempDir, "context-books"), { recursive: true });
+    await fs.writeFile(
+      path.join(tempDir, "context-books", "persona.yaml"),
+      ["entries:", "  - name: Persona", "    alwaysActive: true", "    content: test"].join("\n"),
+      "utf-8",
+    );
+
+    const files = await loadWorkspaceBootstrapFiles(tempDir);
+    expect(files.some((file) => file.name === DEFAULT_SOUL_FILENAME)).toBe(false);
+    expect(files.some((file) => file.name === DEFAULT_IDENTITY_FILENAME)).toBe(false);
+    expect(files.some((file) => file.name === DEFAULT_USER_FILENAME)).toBe(false);
+    expect(files.find((file) => file.name === DEFAULT_AGENTS_FILENAME)?.missing).toBe(false);
   });
 
   it("treats hardlinked bootstrap aliases as missing", async () => {
