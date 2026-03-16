@@ -12,20 +12,22 @@
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                  | 状态   | 备注                                    |
-| ---- | --------------------- | ------ | --------------------------------------- | ----------------------------------------- |
-| P0   | 基线与可观测性        | 未开始 | 优先记录真实 `/context detail` 基线     |
-| P1   | Context Book 基础版   | 进行中 | 首个切片：工作区 `context-books/\*.yaml | json` always-on 条目已接入 bootstrap 管线 |
-| P2   | Agent Card 基础版     | 未开始 | 兼容 `SOUL/IDENTITY/USER`               |
-| P3   | Prompt Profile 基础版 | 未开始 | preset-lite，不开放硬权限提升           |
-| P4   | 预算治理与深度注入    | 未开始 | token budget + tail reminder            |
-| P5   | 资产导入导出          | 未开始 | import/export/UI 选择器                 |
+| 阶段 | 内容                  | 状态   | 备注                                                                                          |
+| ---- | --------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性        | 未开始 | 优先记录真实 `/context detail` 基线                                                           |
+| P1   | Context Book 基础版   | 进行中 | 已支持 `alwaysActive` 常驻条目、`keywords` 触发条目，以及运行期 system context 的基础独立预算 |
+| P2   | Agent Card 基础版     | 未开始 | 兼容 `SOUL/IDENTITY/USER`                                                                     |
+| P3   | Prompt Profile 基础版 | 未开始 | preset-lite，不开放硬权限提升                                                                 |
+| P4   | 预算治理与深度注入    | 未开始 | token budget + tail reminder                                                                  |
+| P5   | 资产导入导出          | 未开始 | import/export/UI 选择器                                                                       |
 
 ## 当前待办
 
 - [ ] P0: 记录一次真实 `/context detail` 基线
 - [x] P1: 设计 Context Book schema 和最小实现切入点
-- [ ] P1: 扩展到关键词触发、位置分层与预算控制
+- [x] P1: 扩展到关键词触发
+- [ ] P1: 扩展到位置分层
+- [x] P1: 扩展到基础预算控制
 - [ ] 把现有 bootstrap 文件清理项并入 P1 的前置整理
 - [ ] 保留工具描述增强 / 尾部提醒作为 P4 的局部先行项
 - [ ] P2/P3: 待 P1 稳定后再进入实现

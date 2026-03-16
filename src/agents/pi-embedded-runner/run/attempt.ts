@@ -46,6 +46,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import { resolveContextBookPromptContext } from "../../context-books.js";
 import { ensureCustomApiRegistered } from "../../custom-api-registry.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
@@ -2356,13 +2357,30 @@ export async function runEmbeddedAttempt(
           trigger: params.trigger,
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
         };
-        const hookResult = await resolvePromptBuildHookResult({
+        const contextBookPromptContext = await resolveContextBookPromptContext({
+          workspaceDir: params.workspaceDir,
+          sessionKey: params.sessionKey,
+          messages: activeSession.messages,
+          warn: (message) => log.warn(`context-books: ${message}`),
+        });
+        const hookResultRaw = await resolvePromptBuildHookResult({
           prompt: params.prompt,
           messages: activeSession.messages,
           hookCtx,
           hookRunner,
           legacyBeforeAgentStartResult: params.legacyBeforeAgentStartResult,
         });
+        const hookResult = {
+          ...hookResultRaw,
+          prependSystemContext: joinPresentTextSegments([
+            contextBookPromptContext.prependSystemContext,
+            hookResultRaw?.prependSystemContext,
+          ]),
+          appendSystemContext: joinPresentTextSegments([
+            hookResultRaw?.appendSystemContext,
+            contextBookPromptContext.appendSystemContext,
+          ]),
+        };
         {
           if (hookResult?.prependContext) {
             effectivePrompt = `${hookResult.prependContext}\n\n${params.prompt}`;

@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeTempWorkspace } from "../test-helpers/workspace.js";
-import { CONTEXT_BOOKS_DIRNAME, loadContextBookBootstrapFiles } from "./context-books.js";
+import {
+  CONTEXT_BOOKS_DIRNAME,
+  loadContextBookBootstrapFiles,
+  resolveContextBookPromptContext,
+} from "./context-books.js";
 
 describe("loadContextBookBootstrapFiles", () => {
   it("loads enabled always-on entries from YAML and JSON files in descending order", async () => {
@@ -53,7 +57,7 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(files[0]?.path).toContain("beta.json#high-priority");
   });
 
-  it("warns and skips entries with unsupported non-bootstrap positions", async () => {
+  it("resolves keyword-triggered prompt context from recent messages", async () => {
     const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
     const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
     await fs.mkdir(contextBooksDir, { recursive: true });
@@ -63,22 +67,79 @@ describe("loadContextBookBootstrapFiles", () => {
         "entries:",
         "  - name: Tail reminder",
         "    enabled: true",
-        "    alwaysActive: true",
+        "    keywords: [vite, react]",
         "    position: tail_reminder",
         "    content: |",
         "      do the thing",
+        "  - name: Bootstrap-only",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    position: before_context",
+        "    content: |",
+        "      always injected elsewhere",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "Please help me fix my vite config." }],
+    });
+
+    expect(result.prependSystemContext).toBeUndefined();
+    expect(result.appendSystemContext).toContain("[Context Book: Tail reminder]");
+    expect(result.appendSystemContext).toContain("do the thing");
+    expect(result.appendSystemContext).not.toContain("always injected elsewhere");
+    expect(result.matchedEntryNames).toEqual(["Tail reminder"]);
+  });
+
+  it("enforces prompt-context budget by skipping lower-priority entries unless ignoreBudget is set", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "budget.yaml"),
+      [
+        "entries:",
+        "  - name: Must keep",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    ignoreBudget: true",
+        "    order: 100",
+        "    position: tail_reminder",
+        "    content: |",
+        "      critical",
+        "  - name: High priority",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    order: 20",
+        "    position: tail_reminder",
+        "    content: |",
+        "      12345678901234567890",
+        "  - name: Low priority",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    order: 1",
+        "    position: tail_reminder",
+        "    content: |",
+        "      abcdefghijklmnopqrstuvwxyz",
       ].join("\n"),
       "utf-8",
     );
 
     const warnings: string[] = [];
-    const files = await loadContextBookBootstrapFiles({
+    const result = await resolveContextBookPromptContext({
       workspaceDir,
+      messages: [{ role: "user", content: "vite issue" }],
+      maxChars: 80,
       warn: (message) => warnings.push(message),
     });
 
-    expect(files).toEqual([]);
+    expect(result.appendSystemContext).toContain("[Context Book: Must keep]");
+    expect(result.appendSystemContext).toContain("[Context Book: High priority]");
+    expect(result.appendSystemContext).not.toContain("[Context Book: Low priority]");
+    expect(result.matchedEntryNames).toEqual(["Must keep", "High priority"]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("unsupported position");
+    expect(warnings[0]).toContain("prompt budget exceeded");
   });
 });

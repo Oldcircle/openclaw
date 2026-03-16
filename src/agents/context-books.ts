@@ -4,6 +4,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
+import { joinPresentTextSegments } from "../shared/text/join-segments.js";
 import { resolveUserPath } from "../utils.js";
 import type { BootstrapContextMode, BootstrapContextRunKind } from "./bootstrap-files.js";
 import type { WorkspaceBootstrapFile } from "./workspace.js";
@@ -12,7 +13,11 @@ export const CONTEXT_BOOKS_DIRNAME = "context-books";
 
 const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const CONTEXT_BOOK_MAX_FILE_BYTES = 512 * 1024;
+const DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS = 6_000;
 const SUPPORTED_BOOTSTRAP_POSITIONS = new Set(["before_context", "after_context"]);
+const SUPPORTED_PROMPT_POSITIONS = new Set(["before_context", "after_context", "tail_reminder"]);
+
+type ContextBookPosition = "before_context" | "after_context" | "tail_reminder";
 
 type RawContextBookDocument =
   | {
@@ -21,12 +26,23 @@ type RawContextBookDocument =
   | unknown[];
 
 type NormalizedContextBookEntry = {
+  name: string;
   syntheticName: string;
   syntheticPath: string;
   content: string;
   order: number;
+  alwaysActive: boolean;
+  ignoreBudget: boolean;
+  keywords: string[];
+  position: ContextBookPosition;
   sourcePath: string;
   sourceIndex: number;
+};
+
+export type ContextBookPromptContext = {
+  prependSystemContext?: string;
+  appendSystemContext?: string;
+  matchedEntryNames: string[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -39,6 +55,15 @@ function parseBoolean(value: unknown, fallback: boolean): boolean {
 
 function parseOrder(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 0;
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
 }
 
 function normalizeEntryName(rawName: unknown, sourcePath: string, index: number): string {
@@ -58,6 +83,14 @@ function slugify(value: string): string {
   return slug || "entry";
 }
 
+function parsePosition(value: unknown): ContextBookPosition {
+  const trimmed = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (trimmed === "before_context" || trimmed === "tail_reminder") {
+    return trimmed;
+  }
+  return "after_context";
+}
+
 function parseContextBookDocument(raw: string, sourcePath: string): RawContextBookDocument | null {
   const extension = path.extname(sourcePath).toLowerCase();
   try {
@@ -75,6 +108,10 @@ function parseContextBookDocument(raw: string, sourcePath: string): RawContextBo
   } catch {
     return null;
   }
+}
+
+function formatPromptContextEntry(entry: NormalizedContextBookEntry): string {
+  return [`[Context Book: ${entry.name}]`, entry.content].join("\n");
 }
 
 function extractEntries(
@@ -100,7 +137,9 @@ function extractEntries(
 
     const enabled = parseBoolean(rawEntry.enabled, true);
     const alwaysActive = parseBoolean(rawEntry.alwaysActive, false);
-    if (!enabled || !alwaysActive) {
+    const ignoreBudget = parseBoolean(rawEntry.ignoreBudget, false);
+    const keywords = parseStringArray(rawEntry.keywords);
+    if (!enabled || (!alwaysActive && keywords.length === 0)) {
       continue;
     }
 
@@ -110,22 +149,25 @@ function extractEntries(
       continue;
     }
 
-    const positionValue =
-      typeof rawEntry.position === "string" ? rawEntry.position.trim().toLowerCase() : "";
-    const position = positionValue || "after_context";
-    if (!SUPPORTED_BOOTSTRAP_POSITIONS.has(position)) {
+    const position = parsePosition(rawEntry.position);
+    if (!SUPPORTED_PROMPT_POSITIONS.has(position)) {
       warn?.(
-        `skipping context book entry ${sourcePath}#${index + 1} - unsupported position "${position}" in bootstrap-backed Context Book v1`,
+        `skipping context book entry ${sourcePath}#${index + 1} - unsupported position "${position}" in Context Book v1`,
       );
       continue;
     }
 
     const entryName = normalizeEntryName(rawEntry.name, sourcePath, index);
     normalized.push({
+      name: entryName,
       syntheticName: `CONTEXT_BOOK:${entryName}`,
       syntheticPath: `${sourcePath}#${slugify(entryName)}`,
       content,
       order: parseOrder(rawEntry.order),
+      alwaysActive,
+      ignoreBudget,
+      keywords,
+      position,
       sourcePath,
       sourceIndex: index,
     });
@@ -191,17 +233,10 @@ function shouldSkipContextBooks(params: {
   return isSubagentSessionKey(sessionKey) || isCronSessionKey(sessionKey);
 }
 
-export async function loadContextBookBootstrapFiles(params: {
+async function loadContextBookEntries(params: {
   workspaceDir: string;
-  sessionKey?: string;
-  contextMode?: BootstrapContextMode;
-  runKind?: BootstrapContextRunKind;
   warn?: (message: string) => void;
-}): Promise<WorkspaceBootstrapFile[]> {
-  if (shouldSkipContextBooks(params)) {
-    return [];
-  }
-
+}): Promise<NormalizedContextBookEntry[]> {
   const workspaceDir = resolveUserPath(params.workspaceDir);
   const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
   let entries: Awaited<ReturnType<typeof fs.readdir>>;
@@ -250,11 +285,158 @@ export async function loadContextBookBootstrapFiles(params: {
     }
     return a.sourceIndex - b.sourceIndex;
   });
+  return normalizedEntries;
+}
 
-  return normalizedEntries.map((entry) => ({
-    name: entry.syntheticName,
-    path: entry.syntheticPath,
-    content: entry.content,
-    missing: false,
-  }));
+function extractTextSegments(value: unknown): string[] {
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => extractTextSegments(entry));
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const segments: string[] = [];
+  if (typeof value.text === "string") {
+    segments.push(value.text);
+  }
+  if ("content" in value) {
+    segments.push(...extractTextSegments(value.content));
+  }
+  return segments;
+}
+
+function buildMessageKeywordHaystack(messages: unknown[]): string {
+  return messages
+    .flatMap((message) => extractTextSegments(message))
+    .map((segment) => segment.trim().toLowerCase())
+    .filter((segment) => segment.length > 0)
+    .join("\n");
+}
+
+function matchesEntryKeywords(entry: NormalizedContextBookEntry, haystack: string): boolean {
+  if (!haystack || entry.keywords.length === 0) {
+    return false;
+  }
+  return entry.keywords.some((keyword) => haystack.includes(keyword.toLowerCase()));
+}
+
+function shouldInjectViaPromptContext(
+  entry: NormalizedContextBookEntry,
+  haystack: string,
+): boolean {
+  if (entry.alwaysActive && !SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position)) {
+    return true;
+  }
+  return matchesEntryKeywords(entry, haystack);
+}
+
+function selectPromptEntriesWithinBudget(params: {
+  entries: NormalizedContextBookEntry[];
+  maxChars: number;
+  warn?: (message: string) => void;
+}): NormalizedContextBookEntry[] {
+  const maxChars =
+    typeof params.maxChars === "number" && Number.isFinite(params.maxChars) && params.maxChars > 0
+      ? Math.floor(params.maxChars)
+      : DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS;
+  let remaining = maxChars;
+  const selected: NormalizedContextBookEntry[] = [];
+
+  for (const entry of params.entries) {
+    const rendered = formatPromptContextEntry(entry);
+    const cost = rendered.length + (selected.length > 0 ? 2 : 0);
+    if (entry.ignoreBudget) {
+      selected.push(entry);
+      continue;
+    }
+    if (cost <= remaining) {
+      selected.push(entry);
+      remaining -= cost;
+      continue;
+    }
+    params.warn?.(
+      `skipping context book entry "${entry.name}" - prompt budget exceeded (${maxChars} chars)`,
+    );
+  }
+
+  return selected;
+}
+
+export async function loadContextBookBootstrapFiles(params: {
+  workspaceDir: string;
+  sessionKey?: string;
+  contextMode?: BootstrapContextMode;
+  runKind?: BootstrapContextRunKind;
+  warn?: (message: string) => void;
+}): Promise<WorkspaceBootstrapFile[]> {
+  if (shouldSkipContextBooks(params)) {
+    return [];
+  }
+
+  const entries = await loadContextBookEntries({
+    workspaceDir: params.workspaceDir,
+    warn: params.warn,
+  });
+
+  return entries
+    .filter((entry) => entry.alwaysActive && SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position))
+    .map((entry) => ({
+      name: entry.syntheticName,
+      path: entry.syntheticPath,
+      content: entry.content,
+      missing: false,
+    }));
+}
+
+export async function resolveContextBookPromptContext(params: {
+  workspaceDir: string;
+  messages: unknown[];
+  sessionKey?: string;
+  contextMode?: BootstrapContextMode;
+  runKind?: BootstrapContextRunKind;
+  maxChars?: number;
+  warn?: (message: string) => void;
+}): Promise<ContextBookPromptContext> {
+  if (shouldSkipContextBooks(params)) {
+    return { matchedEntryNames: [] };
+  }
+
+  const entries = await loadContextBookEntries({
+    workspaceDir: params.workspaceDir,
+    warn: params.warn,
+  });
+  if (entries.length === 0) {
+    return { matchedEntryNames: [] };
+  }
+
+  const haystack = buildMessageKeywordHaystack(params.messages);
+  const matched = selectPromptEntriesWithinBudget({
+    entries: entries.filter((entry) => shouldInjectViaPromptContext(entry, haystack)),
+    maxChars: params.maxChars ?? DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS,
+    warn: params.warn,
+  });
+  if (matched.length === 0) {
+    return { matchedEntryNames: [] };
+  }
+
+  const prependSystemContext = joinPresentTextSegments(
+    matched
+      .filter((entry) => entry.position === "before_context")
+      .map((entry) => formatPromptContextEntry(entry)),
+  );
+  const appendSystemContext = joinPresentTextSegments(
+    matched
+      .filter((entry) => entry.position !== "before_context")
+      .map((entry) => formatPromptContextEntry(entry)),
+  );
+
+  return {
+    prependSystemContext,
+    appendSystemContext,
+    matchedEntryNames: matched.map((entry) => entry.name),
+  };
 }
