@@ -334,6 +334,17 @@ function shouldInjectViaPromptContext(
   return matchesEntryKeywords(entry, haystack);
 }
 
+function buildPromptContextSection(
+  entries: NormalizedContextBookEntry[],
+  position: ContextBookPosition,
+): string | undefined {
+  const filtered = entries.filter((entry) => entry.position === position);
+  if (filtered.length === 0) {
+    return undefined;
+  }
+  return joinPresentTextSegments(filtered.map((entry) => formatPromptContextEntry(entry)));
+}
+
 function selectPromptEntriesWithinBudget(params: {
   entries: NormalizedContextBookEntry[];
   maxChars: number;
@@ -424,14 +435,13 @@ export async function resolveContextBookPromptContext(params: {
   }
 
   const prependSystemContext = joinPresentTextSegments(
-    matched
-      .filter((entry) => entry.position === "before_context")
-      .map((entry) => formatPromptContextEntry(entry)),
+    [buildPromptContextSection(matched, "before_context")].filter(Boolean),
   );
   const appendSystemContext = joinPresentTextSegments(
-    matched
-      .filter((entry) => entry.position !== "before_context")
-      .map((entry) => formatPromptContextEntry(entry)),
+    [
+      buildPromptContextSection(matched, "after_context"),
+      buildPromptContextSection(matched, "tail_reminder"),
+    ].filter(Boolean),
   );
 
   return {

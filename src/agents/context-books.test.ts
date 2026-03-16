@@ -142,4 +142,41 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("prompt budget exceeded");
   });
+
+  it("keeps after_context entries ahead of tail_reminder entries in appended system context", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "positions.yaml"),
+      [
+        "entries:",
+        "  - name: Background note",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: after_context",
+        "    content: |",
+        "      inspect project setup first",
+        "  - name: Final reminder",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      keep the answer concise",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite build issue" }],
+    });
+
+    const appended = result.appendSystemContext ?? "";
+    expect(appended).toContain("[Context Book: Background note]");
+    expect(appended).toContain("[Context Book: Final reminder]");
+    expect(appended.indexOf("[Context Book: Background note]")).toBeLessThan(
+      appended.indexOf("[Context Book: Final reminder]"),
+    );
+  });
 });
