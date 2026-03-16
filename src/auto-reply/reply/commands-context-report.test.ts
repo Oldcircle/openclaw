@@ -5,7 +5,7 @@ import type { HandleCommandsParams } from "./commands-types.js";
 function makeParams(
   commandBodyNormalized: string,
   truncated: boolean,
-  options?: { omitBootstrapLimits?: boolean },
+  options?: { omitBootstrapLimits?: boolean; includeContextBooks?: boolean },
 ): HandleCommandsParams {
   return {
     command: {
@@ -47,6 +47,22 @@ function makeParams(
             truncated,
           },
         ],
+        contextBooks: options?.includeContextBooks
+          ? {
+              projectContextChars: 123,
+              projectContextEntries: [
+                {
+                  name: "Research policy",
+                  path: "/tmp/workspace/context-books/research.yaml#research-policy",
+                  rawChars: 123,
+                  injectedChars: 123,
+                  truncated: false,
+                },
+              ],
+              matchedEntryNames: ["Research policy", "Tail reminder"],
+              atDepthEntries: [{ name: "Tail reminder", depth: 2, chars: 55 }],
+            }
+          : undefined,
         skills: {
           promptChars: 10,
           entries: [{ name: "checks", blockChars: 10 }],
@@ -88,5 +104,18 @@ describe("buildContextReply", () => {
     expect(result.text).toContain("Bootstrap max/file: 20,000 chars");
     expect(result.text).toContain("Bootstrap max/total: 150,000 chars");
     expect(result.text).not.toContain("Bootstrap max/file: ? chars");
+  });
+
+  it("shows Context Book summaries in detail output when present", async () => {
+    const result = await buildContextReply(
+      makeParams("/context detail", false, {
+        includeContextBooks: true,
+      }),
+    );
+    expect(result.text).toContain("Context Books (Project Context): 1 entries");
+    expect(result.text).toContain("Last run matched Context Books: Research policy, Tail reminder");
+    expect(result.text).toContain("Top Context Books (Project Context):");
+    expect(result.text).toContain("Last run at_depth Context Books:");
+    expect(result.text).toContain("Tail reminder: depth=2");
   });
 });

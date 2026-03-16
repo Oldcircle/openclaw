@@ -1,6 +1,7 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { SessionSystemPromptReport } from "../config/sessions/types.js";
 import { buildBootstrapInjectionStats } from "./bootstrap-budget.js";
+import { CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX } from "./context-books.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { WorkspaceBootstrapFile } from "./workspace.js";
 
@@ -77,6 +78,32 @@ function extractToolListText(systemPrompt: string): string {
   return extracted.text.replace(markerA, "").trim();
 }
 
+function buildContextBookReport(params: {
+  bootstrapFiles: WorkspaceBootstrapFile[];
+  injectedFiles: EmbeddedContextFile[];
+  matchedEntryNames?: string[];
+  atDepthEntries?: Array<{ name: string; depth: number; chars: number }>;
+}): NonNullable<SessionSystemPromptReport["contextBooks"]> {
+  const entries = buildBootstrapInjectionStats({
+    bootstrapFiles: params.bootstrapFiles.filter((file) =>
+      file.name.startsWith(CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX),
+    ),
+    injectedFiles: params.injectedFiles,
+  }).map((entry) => ({
+    name: entry.name.slice(CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX.length) || entry.name,
+    path: entry.path,
+    rawChars: entry.rawChars,
+    injectedChars: entry.injectedChars,
+    truncated: entry.truncated,
+  }));
+  return {
+    projectContextChars: entries.reduce((sum, entry) => sum + entry.injectedChars, 0),
+    projectContextEntries: entries,
+    matchedEntryNames: Array.isArray(params.matchedEntryNames) ? params.matchedEntryNames : [],
+    atDepthEntries: Array.isArray(params.atDepthEntries) ? params.atDepthEntries : [],
+  };
+}
+
 export function buildSystemPromptReport(params: {
   source: SessionSystemPromptReport["source"];
   generatedAt: number;
@@ -92,6 +119,8 @@ export function buildSystemPromptReport(params: {
   systemPrompt: string;
   bootstrapFiles: WorkspaceBootstrapFile[];
   injectedFiles: EmbeddedContextFile[];
+  contextBookMatchedEntryNames?: string[];
+  contextBookAtDepthEntries?: Array<{ name: string; depth: number; chars: number }>;
   skillsPrompt: string;
   tools: AgentTool[];
 }): SessionSystemPromptReport {
@@ -128,6 +157,12 @@ export function buildSystemPromptReport(params: {
     injectedWorkspaceFiles: buildBootstrapInjectionStats({
       bootstrapFiles: params.bootstrapFiles,
       injectedFiles: params.injectedFiles,
+    }),
+    contextBooks: buildContextBookReport({
+      bootstrapFiles: params.bootstrapFiles,
+      injectedFiles: params.injectedFiles,
+      matchedEntryNames: params.contextBookMatchedEntryNames,
+      atDepthEntries: params.contextBookAtDepthEntries,
     }),
     skills: {
       promptChars: params.skillsPrompt.length,

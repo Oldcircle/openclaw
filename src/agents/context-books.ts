@@ -13,6 +13,7 @@ import type { BootstrapContextMode, BootstrapContextRunKind } from "./bootstrap-
 import { DEFAULT_CONTEXT_BOOKS_DIRNAME, type WorkspaceBootstrapFile } from "./workspace.js";
 
 export const CONTEXT_BOOKS_DIRNAME = DEFAULT_CONTEXT_BOOKS_DIRNAME;
+export const CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX = "CONTEXT_BOOK:";
 
 const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const CONTEXT_BOOK_MAX_FILE_BYTES = 512 * 1024;
@@ -235,7 +236,7 @@ function extractEntries(
     const entryName = normalizeEntryName(rawEntry.name, sourcePath, index);
     normalized.push({
       name: entryName,
-      syntheticName: `CONTEXT_BOOK:${entryName}`,
+      syntheticName: `${CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX}${entryName}`,
       syntheticPath: `${sourcePath}#${slugify(entryName)}`,
       content,
       order: parseOrder(rawEntry.order),

@@ -141,6 +141,22 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ? `Tools: ${formatNameList(toolNames, 30)}`
     : "Tools: (none)";
   const systemPromptLine = `System prompt (${report.source}): ${formatCharsAndTokens(report.systemPrompt.chars)} (Project Context ${formatCharsAndTokens(report.systemPrompt.projectContextChars)})`;
+  const contextBookProjectEntries = report.contextBooks?.projectContextEntries ?? [];
+  const contextBookMatchedEntryNames = report.contextBooks?.matchedEntryNames ?? [];
+  const contextBookAtDepthEntries = report.contextBooks?.atDepthEntries ?? [];
+  const contextBooksLine = contextBookProjectEntries.length
+    ? `Context Books (Project Context): ${contextBookProjectEntries.length} entries / ${formatCharsAndTokens(report.contextBooks?.projectContextChars ?? 0)}`
+    : "Context Books (Project Context): none";
+  const contextBookMatchedLine = contextBookMatchedEntryNames.length
+    ? `Last run matched Context Books: ${formatNameList(contextBookMatchedEntryNames, 12)}`
+    : report.source === "run"
+      ? "Last run matched Context Books: none"
+      : undefined;
+  const contextBookAtDepthLine = contextBookAtDepthEntries.length
+    ? `Last run at_depth entries: ${contextBookAtDepthEntries.map((entry) => `${entry.name} (depth=${entry.depth})`).join(", ")}`
+    : report.source === "run" && contextBookMatchedEntryNames.length > 0
+      ? "Last run at_depth entries: none"
+      : undefined;
   const workspaceLabel = report.workspaceDir ?? params.workspaceDir;
   const bootstrapMaxChars =
     typeof report.bootstrapMaxChars === "number" &&
@@ -205,6 +221,10 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     "Injected workspace files:",
     ...fileLines,
     "",
+    contextBooksLine,
+    ...(contextBookMatchedLine ? [contextBookMatchedLine] : []),
+    ...(contextBookAtDepthLine ? [contextBookAtDepthLine] : []),
+    "",
     skillsLine,
     skillsNamesLine,
   ];
@@ -222,16 +242,31 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
       report.tools.entries.map((t) => ({ name: t.name, value: t.summaryChars })),
       30,
     );
+    const perContextBook = formatListTop(
+      contextBookProjectEntries.map((entry) => ({ name: entry.name, value: entry.injectedChars })),
+      30,
+    );
     const toolPropsLines = report.tools.entries
       .filter((t) => t.propertiesCount != null)
       .toSorted((a, b) => (b.propertiesCount ?? 0) - (a.propertiesCount ?? 0))
       .slice(0, 30)
       .map((t) => `- ${t.name}: ${t.propertiesCount} params`);
+    const contextBookAtDepthLines = contextBookAtDepthEntries.map(
+      (entry) => `- ${entry.name}: depth=${entry.depth} | ${formatCharsAndTokens(entry.chars)}`,
+    );
 
     return {
       text: [
         "🧠 Context breakdown (detailed)",
         ...sharedContextLines,
+        ...(perContextBook.lines.length
+          ? ["Top Context Books (Project Context):", ...perContextBook.lines]
+          : []),
+        ...(perContextBook.omitted ? [`… (+${perContextBook.omitted} more Context Books)`] : []),
+        ...(contextBookAtDepthLines.length
+          ? ["", "Last run at_depth Context Books:", ...contextBookAtDepthLines]
+          : []),
+        "",
         ...(perSkill.lines.length ? ["Top skills (prompt entry size):", ...perSkill.lines] : []),
         ...(perSkill.omitted ? [`… (+${perSkill.omitted} more skills)`] : []),
         "",

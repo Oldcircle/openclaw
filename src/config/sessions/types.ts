@@ -361,6 +361,22 @@ export type SessionSystemPromptReport = {
     injectedChars: number;
     truncated: boolean;
   }>;
+  contextBooks?: {
+    projectContextChars: number;
+    projectContextEntries: Array<{
+      name: string;
+      path: string;
+      rawChars: number;
+      injectedChars: number;
+      truncated: boolean;
+    }>;
+    matchedEntryNames: string[];
+    atDepthEntries: Array<{
+      name: string;
+      depth: number;
+      chars: number;
+    }>;
+  };
   skills: {
     promptChars: number;
     entries: Array<{ name: string; blockChars: number }>;

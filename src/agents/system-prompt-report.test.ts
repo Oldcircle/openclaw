@@ -82,6 +82,41 @@ describe("buildSystemPromptReport", () => {
     expect(report.bootstrapTotalMaxChars).toBe(22_222);
   });
 
+  it("breaks out Context Book project-context entries separately", () => {
+    const report = buildSystemPromptReport({
+      source: "run",
+      generatedAt: 0,
+      bootstrapMaxChars: 20_000,
+      systemPrompt: "system",
+      bootstrapFiles: [
+        makeBootstrapFile({
+          name: "CONTEXT_BOOK:Research policy",
+          path: "/tmp/workspace/context-books/research.yaml#research-policy",
+          content: "policy body",
+        }),
+      ],
+      injectedFiles: [
+        {
+          path: "/tmp/workspace/context-books/research.yaml#research-policy",
+          content: "policy body",
+        },
+      ],
+      skillsPrompt: "",
+      tools: [],
+    });
+
+    expect(report.contextBooks?.projectContextChars).toBe("policy body".length);
+    expect(report.contextBooks?.projectContextEntries).toEqual([
+      {
+        name: "Research policy",
+        path: "/tmp/workspace/context-books/research.yaml#research-policy",
+        rawChars: "policy body".length,
+        injectedChars: "policy body".length,
+        truncated: false,
+      },
+    ]);
+  });
+
   it("reports injectedChars=0 when injected file does not match by path or basename", () => {
     const file = makeBootstrapFile({ path: "/tmp/workspace/policies/AGENTS.md" });
     const report = makeReport({
