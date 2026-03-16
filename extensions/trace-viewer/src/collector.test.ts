@@ -159,6 +159,62 @@ describe("TraceCollector", () => {
     expect(detail?.warnings).toEqual([]);
   });
 
+  it("surfaces active traces before they are persisted", async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "trace-collector-live-"));
+    const storage = new TraceStorage({ rootDir });
+    const collector = createTraceCollector({ storage, timeoutMs: 60_000 });
+    const sessionCtx = {
+      sessionId: "session-live",
+      sessionKey: "agent:main:live",
+      trigger: "message",
+      channelId: "telegram",
+    };
+
+    let now = Date.parse("2026-03-16T02:00:00.000Z");
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    collector.handlePromptBuild(
+      {
+        prompt: "帮我总结今天的 trace 状态",
+        messages: [{ role: "user", content: "帮我总结今天的 trace 状态" }],
+      } as never,
+      sessionCtx as never,
+    );
+
+    collector.handleLlmInput(
+      {
+        runId: "run-live",
+        sessionId: "session-live",
+        provider: "openai",
+        model: "gpt-5",
+        prompt: "帮我总结今天的 trace 状态",
+        systemPrompt: "be helpful",
+        historyMessages: [{ role: "user", content: "帮我总结今天的 trace 状态" }],
+        imagesCount: 0,
+      } as never,
+      sessionCtx as never,
+    );
+
+    now += 2_000;
+    const list = await collector.list({ limit: 10, sessionKey: "agent:main:live" });
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]).toMatchObject({
+      runId: "run-live",
+      status: "running",
+      userMessage: "帮我总结今天的 trace 状态",
+    });
+    expect(list.items[0]?.durationMs).toBe(2_000);
+
+    const detail = await collector.get(list.items[0]?.traceId ?? "");
+    expect(detail).toMatchObject({
+      runId: "run-live",
+      status: "running",
+      llmCalls: 1,
+    });
+    expect(detail?.endedAt).toBeUndefined();
+    expect(detail?.steps.some((step) => step.type === "llm_input")).toBe(true);
+  });
+
   it("parses system prompt sections with correct categories", async () => {
     const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "trace-collector-"));
     const storage = new TraceStorage({ rootDir });

@@ -59,6 +59,21 @@ export class TraceStorage {
   }
 
   async listTraces(query: TraceListQuery): Promise<TraceListResponse> {
+    const summaries = await this.listMatchingTraces(query);
+    const offset = decodeCursor(query.cursor);
+    const limit = clampLimit(query.limit);
+    const page = summaries.slice(offset, offset + limit);
+    const nextCursor =
+      offset + limit < summaries.length ? encodeCursor({ offset: offset + limit }) : undefined;
+
+    return {
+      schemaVersion: 1,
+      items: page,
+      nextCursor,
+    };
+  }
+
+  async listMatchingTraces(query: TraceListQuery): Promise<TraceSummary[]> {
     await this.ensureReady();
     const files = query.date
       ? [`${query.date}.jsonl`]
@@ -82,17 +97,7 @@ export class TraceStorage {
     }
 
     summaries.sort((a, b) => b.startedAt - a.startedAt);
-    const offset = decodeCursor(query.cursor);
-    const limit = clampLimit(query.limit);
-    const page = summaries.slice(offset, offset + limit);
-    const nextCursor =
-      offset + limit < summaries.length ? encodeCursor({ offset: offset + limit }) : undefined;
-
-    return {
-      schemaVersion: 1,
-      items: page,
-      nextCursor,
-    };
+    return summaries;
   }
 
   async health(): Promise<{ activeIndexFiles: number }> {

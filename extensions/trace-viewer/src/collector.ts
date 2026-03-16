@@ -24,8 +24,11 @@ import type {
   PromptStep,
   ToolCallStep,
   TraceDetail,
+  TraceListQuery,
+  TraceListResponse,
   TraceHealthResponse,
   TraceStep,
+  TraceSummary,
 } from "./types.js";
 
 type CreateCollectorParams = {
@@ -312,11 +315,37 @@ export class TraceCollector {
     void this.persistAndClose(runId, trace);
   }
 
-  async list(query: Parameters<TraceStorage["listTraces"]>[0]) {
-    return await this.storage.listTraces(query);
+  async list(query: TraceListQuery): Promise<TraceListResponse> {
+    const persisted = await this.storage.listMatchingTraces(query);
+    const merged = new Map<string, TraceSummary>();
+
+    for (const item of persisted) {
+      merged.set(item.traceId, item);
+    }
+    for (const item of this.listActiveSummaries(query)) {
+      merged.set(item.traceId, item);
+    }
+
+    const items = Array.from(merged.values()).sort((a, b) => b.startedAt - a.startedAt);
+    const offset = decodeCursor(query.cursor);
+    const limit = clampLimit(query.limit);
+    const page = items.slice(offset, offset + limit);
+    const nextCursor =
+      offset + limit < items.length ? encodeCursor({ offset: offset + limit }) : undefined;
+
+    return {
+      schemaVersion: 1,
+      items: page,
+      nextCursor,
+    };
   }
 
   async get(traceId: string) {
+    for (const trace of this.activeTraces.values()) {
+      if (trace.detail.traceId === traceId && isLiveTraceStatus(trace.detail.status)) {
+        return this.toLiveDetail(trace.detail);
+      }
+    }
     return await this.storage.getTrace(traceId);
   }
 
@@ -476,6 +505,38 @@ export class TraceCollector {
 
   private toolKey(runId: string, toolCallId: string | undefined, toolName: string): string {
     return `${runId}:${toolCallId ?? toolName}`;
+  }
+
+  private listActiveSummaries(query: TraceListQuery): TraceSummary[] {
+    const items: TraceSummary[] = [];
+    for (const trace of this.activeTraces.values()) {
+      if (!isLiveTraceStatus(trace.detail.status)) {
+        continue;
+      }
+      const summary = this.toLiveSummary(trace.detail);
+      if (!matchesTraceQuery(summary, query)) {
+        continue;
+      }
+      items.push(summary);
+    }
+    items.sort((a, b) => b.startedAt - a.startedAt);
+    return items;
+  }
+
+  private toLiveSummary(detail: TraceDetail): TraceSummary {
+    const { steps: _steps, warnings: _warnings, ...summary } = this.toLiveDetail(detail);
+    return summary;
+  }
+
+  private toLiveDetail(detail: TraceDetail): TraceDetail {
+    const now = Date.now();
+    const endedAt = detail.endedAt;
+    return {
+      ...detail,
+      steps: detail.steps.map((step) => ({ ...step })),
+      warnings: [...detail.warnings],
+      durationMs: Math.max(0, (endedAt ?? now) - detail.startedAt),
+    };
   }
 
   private async flushTimedOutTraces(): Promise<void> {
@@ -674,6 +735,32 @@ function add(target: number | undefined, value: number | undefined): number | un
   return (target ?? 0) + (value as number);
 }
 
+function clampLimit(limit?: number): number {
+  if (!Number.isFinite(limit)) {
+    return 50;
+  }
+  return Math.max(1, Math.min(200, Math.floor(limit as number)));
+}
+
+function decodeCursor(cursor?: string): number {
+  if (!cursor) {
+    return 0;
+  }
+  try {
+    const json = Buffer.from(cursor, "base64url").toString("utf8");
+    const payload = JSON.parse(json) as { offset?: unknown };
+    return Number.isFinite(payload.offset) && (payload.offset as number) >= 0
+      ? (payload.offset as number)
+      : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function encodeCursor(payload: { offset: number }): string {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+}
+
 function addUsage(detail: TraceDetail, usage: LlmOutputStep["usage"]): void {
   if (!usage) {
     return;
@@ -699,6 +786,48 @@ function removeWarning(warnings: string[], target: string): void {
   if (index >= 0) {
     warnings.splice(index, 1);
   }
+}
+
+function isLiveTraceStatus(status: TraceDetail["status"]): boolean {
+  return status === "draft" || status === "running";
+}
+
+function matchesTraceQuery(item: TraceSummary, query: TraceListQuery): boolean {
+  if (query.date && toDayKey(item.startedAt) !== query.date) {
+    return false;
+  }
+  if (query.sessionKey && item.sessionKey !== query.sessionKey) {
+    return false;
+  }
+  if (query.status && item.status !== query.status) {
+    return false;
+  }
+  if (query.q && !matchesQuery(item, query.q)) {
+    return false;
+  }
+  return true;
+}
+
+function matchesQuery(item: TraceSummary, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return true;
+  }
+  return [
+    item.traceId,
+    item.runId,
+    item.sessionKey,
+    item.userMessage,
+    item.finalReplyPreview,
+    item.model,
+    item.provider,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .some((value) => value.toLowerCase().includes(needle));
+}
+
+function toDayKey(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 10);
 }
 
 function categorize(name: string): PromptSectionCategory {
