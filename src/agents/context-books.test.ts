@@ -87,10 +87,53 @@ describe("loadContextBookBootstrapFiles", () => {
     });
 
     expect(result.prependSystemContext).toBeUndefined();
+    expect(result.atDepthEntries).toEqual([]);
     expect(result.appendSystemContext).toContain("[Context Book: Tail reminder]");
     expect(result.appendSystemContext).toContain("do the thing");
     expect(result.appendSystemContext).not.toContain("always injected elsewhere");
     expect(result.matchedEntryNames).toEqual(["Tail reminder"]);
+  });
+
+  it("returns at_depth entries separately from append/prepend system context", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "at-depth.yaml"),
+      [
+        "entries:",
+        "  - name: Mid-history reminder",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: at_depth",
+        "    depth: 2",
+        "    content: |",
+        "      remember prior architectural decisions",
+        "  - name: Tail reminder",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      keep the final answer concise",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite build issue" }],
+    });
+
+    expect(result.prependSystemContext).toBeUndefined();
+    expect(result.appendSystemContext).toContain("[Context Book: Tail reminder]");
+    expect(result.atDepthEntries).toEqual([
+      {
+        name: "Mid-history reminder",
+        content: "[Context Book: Mid-history reminder]\nremember prior architectural decisions",
+        depth: 2,
+      },
+    ]);
+    expect(result.matchedEntryNames).toEqual(["Mid-history reminder", "Tail reminder"]);
   });
 
   it("enforces prompt-context budget by skipping lower-priority entries unless ignoreBudget is set", async () => {
@@ -342,5 +385,148 @@ describe("loadContextBookBootstrapFiles", () => {
     });
     expect(directResult.appendSystemContext).toContain("[Context Book: Direct helper]");
     expect(directResult.appendSystemContext).not.toContain("[Context Book: Group helper]");
+  });
+
+  it("keeps only one matched entry from the same group", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "groups.yaml"),
+      [
+        "entries:",
+        "  - name: React specialist",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    group: frontend-style",
+        "    position: tail_reminder",
+        "    content: |",
+        "      prefer React-first framing",
+        "  - name: Vue specialist",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    group: frontend-style",
+        "    position: tail_reminder",
+        "    content: |",
+        "      prefer Vue-first framing",
+        "  - name: Shared helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      always include shared helper",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      sessionKey: "agent:main:direct:user-1",
+      messages: [{ role: "user", content: "vite issue" }],
+    });
+
+    const appended = result.appendSystemContext ?? "";
+    const groupedMatches = ["React specialist", "Vue specialist"].filter((name) =>
+      appended.includes(`[Context Book: ${name}]`),
+    );
+    expect(groupedMatches).toHaveLength(1);
+    expect(appended).toContain("[Context Book: Shared helper]");
+    expect(result.matchedEntryNames).toHaveLength(2);
+  });
+
+  it("applies group mutual exclusion to always-on bootstrap entries", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "bootstrap-groups.yaml"),
+      [
+        "entries:",
+        "  - name: Default persona",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    group: persona",
+        "    position: before_context",
+        "    content: |",
+        "      default persona",
+        "  - name: Research persona",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    group: persona",
+        "    position: before_context",
+        "    content: |",
+        "      research persona",
+        "  - name: Safety guard",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    position: before_context",
+        "    content: |",
+        "      keep safety rules",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const files = await loadContextBookBootstrapFiles({
+      workspaceDir,
+      sessionKey: "agent:main:main",
+      agentId: "main",
+    });
+
+    const groupedMatches = files
+      .map((file) => file.name)
+      .filter(
+        (name) =>
+          name === "CONTEXT_BOOK:Default persona" || name === "CONTEXT_BOOK:Research persona",
+      );
+    expect(groupedMatches).toHaveLength(1);
+    expect(files.map((file) => file.name)).toContain("CONTEXT_BOOK:Safety guard");
+  });
+
+  it("biases same-group selection toward higher groupWeight values across sessions", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "group-weights.yaml"),
+      [
+        "entries:",
+        "  - name: Preferred helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    group: helper-variant",
+        "    groupWeight: 20",
+        "    position: tail_reminder",
+        "    content: |",
+        "      higher weight",
+        "  - name: Rare helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    group: helper-variant",
+        "    groupWeight: 1",
+        "    position: tail_reminder",
+        "    content: |",
+        "      lower weight",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    let preferredCount = 0;
+    let rareCount = 0;
+    for (let index = 0; index < 64; index += 1) {
+      const result = await resolveContextBookPromptContext({
+        workspaceDir,
+        sessionKey: `agent:main:direct:user-${index}`,
+        messages: [{ role: "user", content: "vite issue" }],
+      });
+      if (result.matchedEntryNames.includes("Preferred helper")) {
+        preferredCount += 1;
+      }
+      if (result.matchedEntryNames.includes("Rare helper")) {
+        rareCount += 1;
+      }
+    }
+
+    expect(preferredCount).toBeGreaterThan(rareCount);
+    expect(preferredCount + rareCount).toBe(64);
   });
 });

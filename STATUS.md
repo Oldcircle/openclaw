@@ -12,14 +12,14 @@
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                  | 状态   | 备注                                                                                                                                            |
-| ---- | --------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性        | 未开始 | 优先记录真实 `/context detail` 基线                                                                                                             |
-| P1   | Context Book 基础版   | 进行中 | 已支持 `alwaysActive`、`keywords`、`secondaryKeywords/secondaryLogic`、位置分层、基础预算，以及 `agentIds/channels/chatTypes/sessionKinds` 过滤 |
-| P2   | Agent Card 基础版     | 未开始 | 兼容 `SOUL/IDENTITY/USER`                                                                                                                       |
-| P3   | Prompt Profile 基础版 | 未开始 | preset-lite，不开放硬权限提升                                                                                                                   |
-| P4   | 预算治理与深度注入    | 未开始 | token budget + tail reminder                                                                                                                    |
-| P5   | 资产导入导出          | 未开始 | import/export/UI 选择器                                                                                                                         |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                          |
+| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 未开始 | 优先记录真实 `/context detail` 基线                                                                                                                                           |
+| P1   | Context Book 基础版    | 进行中 | 已支持 `alwaysActive`、`keywords`、`secondaryKeywords/secondaryLogic`、位置分层、基础预算、`group/groupWeight/at_depth`，以及 `agentIds/channels/chatTypes/sessionKinds` 过滤 |
+| P2   | Agent Card 基础版      | 未开始 | 兼容 `SOUL/IDENTITY/USER`                                                                                                                                                     |
+| P3   | Prompt Profile 基础版  | 未开始 | preset-lite，不开放硬权限提升                                                                                                                                                 |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                          |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                       |
 
 ## 当前待办
 
@@ -30,7 +30,7 @@
 - [x] P1: 扩展到位置分层
 - [x] P1: 扩展到基础预算控制
 - [x] P1: 扩展到 `agentIds/channels/chatTypes/sessionKinds` 过滤
-- [ ] P1: 扩展到 `group/groupWeight/at_depth`
+- [x] P1: 扩展到 `at_depth`
 - [ ] 把现有 bootstrap 文件清理项并入 P1 的前置整理
 - [ ] 保留工具描述增强 / 尾部提醒作为 P4 的局部先行项
 - [ ] P2/P3: 待 P1 稳定后再进入实现
@@ -50,9 +50,11 @@
 - `src/agents/context-books.ts`
   - 新增 `Context Book` 资产读取与解析
   - 已支持 `alwaysActive`、`keywords`、`secondaryKeywords/secondaryLogic`
-  - 已支持 `before_context / after_context / tail_reminder`
+  - 已支持 `before_context / after_context / tail_reminder / at_depth`
+  - 已支持 `group / groupWeight` 同组互斥与组内加权选择
   - 已支持 `agentIds / channels / chatTypes / sessionKinds`
   - 已支持运行期 system context 独立预算与 `ignoreBudget`
+  - `at_depth` 条目会在本轮 prompt 前临时插入历史并在完成后剥离，不污染持久 session
 - `src/agents/bootstrap-files.ts`
   - 常驻 `Context Book` 条目已接入 bootstrap 管线
 - `src/agents/pi-embedded-runner/run/attempt.ts`

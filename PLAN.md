@@ -162,6 +162,28 @@ depth_prompt:
 | `agentIds`          | string[] | 限定 agent                                                            |
 | `ignoreBudget`      | boolean  | 无视 token 预算限制                                                   |
 
+**当前已落地（截至 2026-03-16）**：
+
+- `enabled`
+- `alwaysActive`
+- `keywords`
+- `secondaryKeywords`
+- `secondaryLogic`
+- `content`
+- `position=before_context/after_context/tail_reminder`
+- `order`
+- `sessionKinds`
+- `chatTypes`
+- `channels`
+- `agentIds`
+- `ignoreBudget`
+- `group`
+- `groupWeight`
+- `depth`
+- `position=at_depth`
+
+**P1 核心 schema 已齐**，后续预算治理增强仍放在 P4（sticky/cooldown、更细粒度 budget 等）。
+
 **P4 扩展字段（暂不实现）**：
 
 | 字段               | 类型    | 说明                                  |
@@ -176,12 +198,12 @@ depth_prompt:
 
 **与 ST 世界书的关键差异**：
 
-| 差异点     | ST 做法                                             | OpenClaw 适配                                      |
-| ---------- | --------------------------------------------------- | -------------------------------------------------- |
-| 触发来源   | 扫描聊天文本                                        | 扫描聊天文本 + 工具调用类型 + 文件路径/技术栈      |
-| 预算基准   | 占 max_context 百分比                               | 占 system prompt 可用空间百分比                    |
-| 存储格式   | JSON 嵌入 PNG 或独立 JSON                           | YAML 文件（与 Skills 统一）                        |
-| 多来源合并 | chatLore > personaLore > characterLore > globalLore | workspace > agent > global（与 Skills 优先级一致） |
+| 差异点     | ST 做法                                             | OpenClaw 适配                                                     |
+| ---------- | --------------------------------------------------- | ----------------------------------------------------------------- |
+| 触发来源   | 扫描聊天文本                                        | 当前 P1 只扫描聊天文本；后续可扩展到工具调用类型、文件路径/技术栈 |
+| 预算基准   | 占 max_context 百分比                               | 占 system prompt 可用空间百分比                                   |
+| 存储格式   | JSON 嵌入 PNG 或独立 JSON                           | YAML 文件（与 Skills 统一）                                       |
+| 多来源合并 | chatLore > personaLore > characterLore > globalLore | workspace > agent > global（与 Skills 优先级一致）                |
 
 ---
 

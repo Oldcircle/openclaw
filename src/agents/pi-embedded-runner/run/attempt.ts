@@ -1233,6 +1233,59 @@ export function composeSystemPromptWithHookContext(params: {
   );
 }
 
+const CONTEXT_BOOK_AT_DEPTH_MARKER = "<openclaw_context_book_depth";
+
+export function injectAtDepthContextBookMessages(params: {
+  messages: AgentMessage[];
+  entries: Array<{
+    name: string;
+    content: string;
+    depth: number;
+  }>;
+}): AgentMessage[] {
+  if (params.entries.length === 0) {
+    return params.messages;
+  }
+
+  const nextMessages = params.messages.slice();
+  const baseLength = params.messages.length;
+  const insertions = params.entries
+    .map((entry, index) => ({
+      index,
+      baseIndex: Math.max(0, Math.min(baseLength, baseLength - Math.max(0, entry.depth))),
+      message: {
+        role: "user" as const,
+        content: `${CONTEXT_BOOK_AT_DEPTH_MARKER} name="${entry.name}" depth="${entry.depth}">\n${entry.content}\n</openclaw_context_book_depth>`,
+        timestamp: Date.now() + index,
+      } as AgentMessage,
+    }))
+    .toSorted((a, b) => {
+      if (a.baseIndex !== b.baseIndex) {
+        return a.baseIndex - b.baseIndex;
+      }
+      return a.index - b.index;
+    });
+
+  let inserted = 0;
+  for (const insertion of insertions) {
+    nextMessages.splice(insertion.baseIndex + inserted, 0, insertion.message);
+    inserted += 1;
+  }
+  return nextMessages;
+}
+
+export function stripAtDepthContextBookMessages(messages: AgentMessage[]): AgentMessage[] {
+  return messages.filter((message) => {
+    if (message.role !== "user") {
+      return true;
+    }
+    return (
+      typeof message.content !== "string" ||
+      !message.content.startsWith(CONTEXT_BOOK_AT_DEPTH_MARKER)
+    );
+  });
+}
+
 export function resolvePromptModeForSession(sessionKey?: string): "minimal" | "full" {
   if (!sessionKey) {
     return "full";
@@ -2365,6 +2418,7 @@ export async function runEmbeddedAttempt(
           messages: activeSession.messages,
           warn: (message) => log.warn(`context-books: ${message}`),
         });
+        const hasAtDepthEntries = contextBookPromptContext.atDepthEntries.length > 0;
         const hookResultRaw = await resolvePromptBuildHookResult({
           prompt: params.prompt,
           messages: activeSession.messages,
@@ -2415,10 +2469,6 @@ export async function runEmbeddedAttempt(
         currentPromptForHook = effectivePrompt;
 
         log.debug(`embedded run prompt start: runId=${params.runId} sessionId=${params.sessionId}`);
-        cacheTrace?.recordStage("prompt:before", {
-          prompt: effectivePrompt,
-          messages: activeSession.messages,
-        });
 
         // Repair orphaned trailing user messages so new prompts don't violate role ordering.
         const leafEntry = sessionManager.getLeafEntry();
@@ -2484,13 +2534,35 @@ export async function runEmbeddedAttempt(
                 `provider=${params.provider}/${params.modelId} sessionFile=${params.sessionFile}`,
             );
           }
+          if (hasAtDepthEntries) {
+            activeSession.agent.replaceMessages(
+              injectAtDepthContextBookMessages({
+                messages: activeSession.messages,
+                entries: contextBookPromptContext.atDepthEntries,
+              }),
+            );
+          }
+          cacheTrace?.recordStage("prompt:before", {
+            prompt: effectivePrompt,
+            messages: activeSession.messages,
+          });
 
-          // Only pass images option if there are actually images to pass
-          // This avoids potential issues with models that don't expect the images parameter
-          if (imageResult.images.length > 0) {
-            await abortable(activeSession.prompt(effectivePrompt, { images: imageResult.images }));
-          } else {
-            await abortable(activeSession.prompt(effectivePrompt));
+          try {
+            // Only pass images option if there are actually images to pass
+            // This avoids potential issues with models that don't expect the images parameter
+            if (imageResult.images.length > 0) {
+              await abortable(
+                activeSession.prompt(effectivePrompt, { images: imageResult.images }),
+              );
+            } else {
+              await abortable(activeSession.prompt(effectivePrompt));
+            }
+          } finally {
+            if (hasAtDepthEntries) {
+              activeSession.agent.replaceMessages(
+                stripAtDepthContextBookMessages(activeSession.messages),
+              );
+            }
           }
         } catch (err) {
           // Yield-triggered abort is intentional — treat as clean stop, not error.

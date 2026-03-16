@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -17,9 +18,14 @@ const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const CONTEXT_BOOK_MAX_FILE_BYTES = 512 * 1024;
 const DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS = 6_000;
 const SUPPORTED_BOOTSTRAP_POSITIONS = new Set(["before_context", "after_context"]);
-const SUPPORTED_PROMPT_POSITIONS = new Set(["before_context", "after_context", "tail_reminder"]);
+const SUPPORTED_PROMPT_POSITIONS = new Set([
+  "before_context",
+  "after_context",
+  "tail_reminder",
+  "at_depth",
+]);
 
-type ContextBookPosition = "before_context" | "after_context" | "tail_reminder";
+type ContextBookPosition = "before_context" | "after_context" | "tail_reminder" | "at_depth";
 type ContextBookSessionKind = "default" | "cron" | "subagent";
 type ContextBookSecondaryLogic = "AND_ANY" | "AND_ALL" | "NOT_ANY" | "NOT_ALL";
 
@@ -35,6 +41,9 @@ type NormalizedContextBookEntry = {
   syntheticPath: string;
   content: string;
   order: number;
+  depth: number;
+  group: string;
+  groupWeight: number;
   alwaysActive: boolean;
   ignoreBudget: boolean;
   keywords: string[];
@@ -52,6 +61,11 @@ type NormalizedContextBookEntry = {
 export type ContextBookPromptContext = {
   prependSystemContext?: string;
   appendSystemContext?: string;
+  atDepthEntries: Array<{
+    name: string;
+    content: string;
+    depth: number;
+  }>;
   matchedEntryNames: string[];
 };
 
@@ -65,6 +79,18 @@ function parseBoolean(value: unknown, fallback: boolean): boolean {
 
 function parseOrder(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 0;
+}
+
+function parseGroup(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function parseGroupWeight(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function parseDepth(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -126,7 +152,7 @@ function slugify(value: string): string {
 
 function parsePosition(value: unknown): ContextBookPosition {
   const trimmed = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (trimmed === "before_context" || trimmed === "tail_reminder") {
+  if (trimmed === "before_context" || trimmed === "tail_reminder" || trimmed === "at_depth") {
     return trimmed;
   }
   return "after_context";
@@ -179,6 +205,8 @@ function extractEntries(
     const enabled = parseBoolean(rawEntry.enabled, true);
     const alwaysActive = parseBoolean(rawEntry.alwaysActive, false);
     const ignoreBudget = parseBoolean(rawEntry.ignoreBudget, false);
+    const group = parseGroup(rawEntry.group);
+    const groupWeight = parseGroupWeight(rawEntry.groupWeight);
     const keywords = parseStringArray(rawEntry.keywords);
     const secondaryKeywords = parseStringArray(rawEntry.secondaryKeywords);
     const secondaryLogic = parseSecondaryLogic(rawEntry.secondaryLogic);
@@ -211,6 +239,9 @@ function extractEntries(
       syntheticPath: `${sourcePath}#${slugify(entryName)}`,
       content,
       order: parseOrder(rawEntry.order),
+      depth: parseDepth(rawEntry.depth),
+      group,
+      groupWeight,
       alwaysActive,
       ignoreBudget,
       keywords,
@@ -477,6 +508,92 @@ function buildPromptContextSection(
   return joinPresentTextSegments(filtered.map((entry) => formatPromptContextEntry(entry)));
 }
 
+function buildAtDepthEntries(entries: NormalizedContextBookEntry[]): Array<{
+  name: string;
+  content: string;
+  depth: number;
+}> {
+  return entries
+    .filter((entry) => entry.position === "at_depth")
+    .map((entry) => ({
+      name: entry.name,
+      content: formatPromptContextEntry(entry),
+      depth: entry.depth,
+    }));
+}
+
+function buildDeterministicGroupFraction(seed: string): number {
+  const hex = createHash("sha256").update(seed).digest("hex").slice(0, 12);
+  const numerator = Number.parseInt(hex, 16);
+  return numerator / 0x1_0000_0000_0000;
+}
+
+function selectWeightedGroupEntry(params: {
+  entries: NormalizedContextBookEntry[];
+  seed: string;
+}): NormalizedContextBookEntry {
+  const totalWeight = params.entries.reduce((sum, entry) => sum + entry.groupWeight, 0);
+  if (!(totalWeight > 0)) {
+    return params.entries[0];
+  }
+
+  let cursor = buildDeterministicGroupFraction(params.seed) * totalWeight;
+  for (const entry of params.entries) {
+    cursor -= entry.groupWeight;
+    if (cursor < 0) {
+      return entry;
+    }
+  }
+  return params.entries.at(-1) as NormalizedContextBookEntry;
+}
+
+function applyContextBookGroups(params: {
+  entries: NormalizedContextBookEntry[];
+  workspaceDir: string;
+  sessionKey?: string;
+  agentId?: string;
+  channelId?: string;
+  haystack?: string;
+  phase: "bootstrap" | "prompt";
+}): NormalizedContextBookEntry[] {
+  if (params.entries.length <= 1) {
+    return params.entries;
+  }
+
+  const groupedEntries = new Map<string, NormalizedContextBookEntry[]>();
+  const selected = new Set<NormalizedContextBookEntry>();
+  for (const entry of params.entries) {
+    if (!entry.group) {
+      selected.add(entry);
+      continue;
+    }
+    const existing = groupedEntries.get(entry.group);
+    if (existing) {
+      existing.push(entry);
+    } else {
+      groupedEntries.set(entry.group, [entry]);
+    }
+  }
+
+  for (const [group, entries] of groupedEntries.entries()) {
+    const chosen = selectWeightedGroupEntry({
+      entries,
+      seed: [
+        params.phase,
+        group,
+        resolveUserPath(params.workspaceDir),
+        params.sessionKey?.trim().toLowerCase() ?? "",
+        params.agentId?.trim().toLowerCase() ?? "",
+        params.channelId?.trim().toLowerCase() ?? "",
+        params.haystack ?? "",
+      ].join("\n"),
+    });
+    selected.add(chosen);
+  }
+
+  return params.entries.filter((entry) => selected.has(entry));
+}
+
 function selectPromptEntriesWithinBudget(params: {
   entries: NormalizedContextBookEntry[];
   maxChars: number;
@@ -526,8 +643,8 @@ export async function loadContextBookBootstrapFiles(params: {
     warn: params.warn,
   });
 
-  return entries
-    .filter(
+  const matchedEntries = applyContextBookGroups({
+    entries: entries.filter(
       (entry) =>
         entry.alwaysActive &&
         SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position) &&
@@ -536,7 +653,15 @@ export async function loadContextBookBootstrapFiles(params: {
           sessionKey: params.sessionKey,
           agentId: params.agentId,
         }),
-    )
+    ),
+    workspaceDir: params.workspaceDir,
+    sessionKey: params.sessionKey,
+    agentId: params.agentId,
+    phase: "bootstrap",
+  });
+
+  return matchedEntries
+    .filter((entry) => entry.alwaysActive && SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position))
     .map((entry) => ({
       name: entry.syntheticName,
       path: entry.syntheticPath,
@@ -557,7 +682,7 @@ export async function resolveContextBookPromptContext(params: {
   warn?: (message: string) => void;
 }): Promise<ContextBookPromptContext> {
   if (shouldSkipContextBooks(params)) {
-    return { matchedEntryNames: [] };
+    return { atDepthEntries: [], matchedEntryNames: [] };
   }
 
   const entries = await loadContextBookEntries({
@@ -565,11 +690,11 @@ export async function resolveContextBookPromptContext(params: {
     warn: params.warn,
   });
   if (entries.length === 0) {
-    return { matchedEntryNames: [] };
+    return { atDepthEntries: [], matchedEntryNames: [] };
   }
 
   const haystack = buildMessageKeywordHaystack(params.messages);
-  const matched = selectPromptEntriesWithinBudget({
+  const groupedMatchedEntries = applyContextBookGroups({
     entries: entries.filter(
       (entry) =>
         matchesEntryScope({
@@ -579,11 +704,20 @@ export async function resolveContextBookPromptContext(params: {
           channelId: params.channelId,
         }) && shouldInjectViaPromptContext(entry, haystack),
     ),
+    workspaceDir: params.workspaceDir,
+    sessionKey: params.sessionKey,
+    agentId: params.agentId,
+    channelId: params.channelId,
+    haystack,
+    phase: "prompt",
+  });
+  const matched = selectPromptEntriesWithinBudget({
+    entries: groupedMatchedEntries,
     maxChars: params.maxChars ?? DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS,
     warn: params.warn,
   });
   if (matched.length === 0) {
-    return { matchedEntryNames: [] };
+    return { atDepthEntries: [], matchedEntryNames: [] };
   }
 
   const prependSystemContext = joinPresentTextSegments(
@@ -599,6 +733,7 @@ export async function resolveContextBookPromptContext(params: {
   return {
     prependSystemContext,
     appendSystemContext,
+    atDepthEntries: buildAtDepthEntries(matched),
     matchedEntryNames: matched.map((entry) => entry.name),
   };
 }

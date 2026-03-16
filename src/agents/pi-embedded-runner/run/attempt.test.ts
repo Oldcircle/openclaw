@@ -4,12 +4,14 @@ import { resolveOllamaBaseUrlForRun } from "../../ollama-stream.js";
 import {
   buildAfterTurnRuntimeContext,
   composeSystemPromptWithHookContext,
+  injectAtDepthContextBookMessages,
   isOllamaCompatProvider,
   prependSystemPromptAddition,
   resolveAttemptFsWorkspaceOnly,
   resolveOllamaCompatNumCtxEnabled,
   resolvePromptBuildHookResult,
   resolvePromptModeForSession,
+  stripAtDepthContextBookMessages,
   shouldInjectOllamaCompatNumCtx,
   decodeHtmlEntitiesInObject,
   wrapOllamaCompatNumCtx,
@@ -128,6 +130,47 @@ describe("composeSystemPromptWithHookContext", () => {
         appendSystemContext: "  append only  ",
       }),
     ).toBe("append only");
+  });
+});
+
+describe("at-depth context book message helpers", () => {
+  it("inserts synthetic reminder messages relative to the tail of history", () => {
+    const result = injectAtDepthContextBookMessages({
+      messages: [
+        { role: "user", content: "first", timestamp: 1 },
+        { role: "assistant", content: "second", timestamp: 2 },
+        { role: "user", content: "third", timestamp: 3 },
+      ] as never,
+      entries: [
+        { name: "Depth zero", content: "[Context Book: Depth zero]\nzero", depth: 0 },
+        { name: "Depth two", content: "[Context Book: Depth two]\ntwo", depth: 2 },
+      ],
+    });
+
+    expect(result).toHaveLength(5);
+    expect(result[1]).toMatchObject({
+      role: "user",
+      content: expect.stringContaining('name="Depth two" depth="2"'),
+    });
+    expect(result[4]).toMatchObject({
+      role: "user",
+      content: expect.stringContaining('name="Depth zero" depth="0"'),
+    });
+  });
+
+  it("strips previously injected synthetic reminder messages back out of history", () => {
+    const injected = injectAtDepthContextBookMessages({
+      messages: [
+        { role: "user", content: "first", timestamp: 1 },
+        { role: "assistant", content: "second", timestamp: 2 },
+      ] as never,
+      entries: [{ name: "Depth one", content: "[Context Book: Depth one]\none", depth: 1 }],
+    });
+
+    expect(stripAtDepthContextBookMessages(injected)).toEqual([
+      { role: "user", content: "first", timestamp: 1 },
+      { role: "assistant", content: "second", timestamp: 2 },
+    ]);
   });
 });
 

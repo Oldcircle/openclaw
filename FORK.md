@@ -32,7 +32,7 @@ upstream/main   →   main（只跟进，禁止直接在此开发）
 
 - `extensions/trace-viewer`：基于插件系统实现 trace 采集与可视化接口
 - `src/agents/pi-embedded-*`：补齐 agentic loop 每轮 `llm_input` / `llm_output` hook，支撑 trace-viewer 看到真实多轮 LLM 过程
-- `src/agents/workspace*` / `src/agents/bootstrap-files.ts` / `src/agents/system-prompt*`：把当前固定文件槽位式提示词组织，升级为资产化系统（Agent Card / Context Book / Prompt Profile，详见 `PLAN.md`）
+- `src/agents/workspace*` / `src/agents/context-books.ts` / `src/agents/bootstrap-files.ts` / `src/agents/pi-embedded-runner/run/attempt.ts` / `src/agents/system-prompt*`：把当前固定文件槽位式提示词组织，升级为资产化系统（Agent Card / Context Book / Prompt Profile，详见 `PLAN.md`）
 
 当前原则：
 
