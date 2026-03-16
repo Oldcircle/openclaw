@@ -81,6 +81,90 @@ describe("resolveBootstrapFilesForRun", () => {
     expect(warnings).toHaveLength(3);
     expect(warnings[0]).toContain('missing or invalid "path" field');
   });
+
+  it("prefers Agent Card persona slots over legacy workspace files", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.writeFile(path.join(workspaceDir, "SOUL.md"), "legacy soul", "utf8");
+    await fs.writeFile(path.join(workspaceDir, "IDENTITY.md"), "legacy identity", "utf8");
+    await fs.writeFile(path.join(workspaceDir, "USER.md"), "legacy user", "utf8");
+    await fs.writeFile(path.join(workspaceDir, "AGENTS.md"), "legacy agents", "utf8");
+    await fs.writeFile(
+      path.join(workspaceDir, "agent-card.yaml"),
+      [
+        'identity: "Card identity"',
+        'personality: "Card personality"',
+        'tone: "Card tone"',
+        'user_relationship: "Card user relationship"',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const files = await resolveBootstrapFilesForRun({ workspaceDir });
+
+    const identity = files.find((file) => file.name === "IDENTITY.md");
+    const soul = files.find((file) => file.name === "SOUL.md");
+    const user = files.find((file) => file.name === "USER.md");
+    const agents = files.find((file) => file.name === "AGENTS.md");
+
+    expect(identity?.path).toBe(path.join(workspaceDir, "agent-card.yaml#IDENTITY.md"));
+    expect(identity?.content).toContain("Card identity");
+    expect(soul?.path).toBe(path.join(workspaceDir, "agent-card.yaml#SOUL.md"));
+    expect(soul?.content).toContain("## Personality");
+    expect(soul?.content).toContain("Card tone");
+    expect(user?.path).toBe(path.join(workspaceDir, "agent-card.yaml#USER.md"));
+    expect(user?.content).toContain("Card user relationship");
+    expect(agents?.path).toBe(path.join(workspaceDir, "AGENTS.md"));
+    expect(agents?.content).toBe("legacy agents");
+  });
+
+  it("keeps legacy persona files for fields missing from Agent Card", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.writeFile(path.join(workspaceDir, "SOUL.md"), "legacy soul", "utf8");
+    await fs.writeFile(path.join(workspaceDir, "IDENTITY.md"), "legacy identity", "utf8");
+    await fs.writeFile(path.join(workspaceDir, "USER.md"), "legacy user", "utf8");
+    await fs.writeFile(
+      path.join(workspaceDir, "agent-card.yaml"),
+      ['identity: "Card identity"'].join("\n"),
+      "utf8",
+    );
+
+    const files = await resolveBootstrapFilesForRun({ workspaceDir });
+
+    const identity = files.find((file) => file.name === "IDENTITY.md");
+    const soul = files.find((file) => file.name === "SOUL.md");
+    const user = files.find((file) => file.name === "USER.md");
+
+    expect(identity?.path).toBe(path.join(workspaceDir, "agent-card.yaml#IDENTITY.md"));
+    expect(identity?.content).toContain("Card identity");
+    expect(soul?.path).toBe(path.join(workspaceDir, "SOUL.md"));
+    expect(soul?.content).toBe("legacy soul");
+    expect(user?.path).toBe(path.join(workspaceDir, "USER.md"));
+    expect(user?.content).toBe("legacy user");
+  });
+
+  it("falls back to legacy persona files when Agent Card is invalid", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    const warnings: string[] = [];
+    await fs.writeFile(path.join(workspaceDir, "SOUL.md"), "legacy soul", "utf8");
+    await fs.writeFile(
+      path.join(workspaceDir, "agent-card.yaml"),
+      "identity: [unterminated",
+      "utf8",
+    );
+
+    const files = await resolveBootstrapFilesForRun({
+      workspaceDir,
+      warn: (message) => warnings.push(message),
+    });
+
+    const soul = files.find((file) => file.name === "SOUL.md");
+
+    expect(soul?.path).toBe(path.join(workspaceDir, "SOUL.md"));
+    expect(soul?.content).toBe("legacy soul");
+    expect(warnings).toEqual([
+      `skipping agent card ${path.join(workspaceDir, "agent-card.yaml")} - invalid YAML/JSON document`,
+    ]);
+  });
 });
 
 describe("resolveBootstrapContextForRun", () => {

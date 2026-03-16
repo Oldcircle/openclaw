@@ -31,6 +31,7 @@ import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { resolveUserPath } from "../../../utils.js";
 import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
+import { resolveAgentCardPromptContext } from "../../agent-card.js";
 import { resolveOpenClawAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
@@ -2410,6 +2411,10 @@ export async function runEmbeddedAttempt(
           trigger: params.trigger,
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
         };
+        const agentCardPromptContext = await resolveAgentCardPromptContext({
+          workspaceDir: params.workspaceDir,
+          warn: (message) => log.warn(`agent-card: ${message}`),
+        });
         const contextBookPromptContext = await resolveContextBookPromptContext({
           workspaceDir: params.workspaceDir,
           sessionKey: params.sessionKey,
@@ -2418,7 +2423,11 @@ export async function runEmbeddedAttempt(
           messages: activeSession.messages,
           warn: (message) => log.warn(`context-books: ${message}`),
         });
-        const hasAtDepthEntries = contextBookPromptContext.atDepthEntries.length > 0;
+        const atDepthEntries = [
+          ...agentCardPromptContext.atDepthEntries,
+          ...contextBookPromptContext.atDepthEntries,
+        ];
+        const hasAtDepthEntries = atDepthEntries.length > 0;
         const hookResultRaw = await resolvePromptBuildHookResult({
           prompt: params.prompt,
           messages: activeSession.messages,
@@ -2426,6 +2435,15 @@ export async function runEmbeddedAttempt(
           hookRunner,
           legacyBeforeAgentStartResult: params.legacyBeforeAgentStartResult,
         });
+        systemPromptReport.contextBooks = {
+          ...systemPromptReport.contextBooks,
+          matchedEntryNames: contextBookPromptContext.matchedEntryNames,
+          atDepthEntries: contextBookPromptContext.atDepthEntries.map((entry) => ({
+            name: entry.name,
+            depth: entry.depth,
+            chars: entry.content.length,
+          })),
+        };
         const hookResult = {
           ...hookResultRaw,
           prependSystemContext: joinPresentTextSegments([
@@ -2538,7 +2556,7 @@ export async function runEmbeddedAttempt(
             activeSession.agent.replaceMessages(
               injectAtDepthContextBookMessages({
                 messages: activeSession.messages,
-                entries: contextBookPromptContext.atDepthEntries,
+                entries: atDepthEntries,
               }),
             );
           }

@@ -526,6 +526,7 @@ describe("buildAgentSystemPrompt", () => {
       contextFiles: [
         { path: "./SOUL.md", content: "Persona" },
         { path: "dir\\SOUL.md", content: "Persona Windows" },
+        { path: "/tmp/openclaw/agent-card.yaml#SOUL.md", content: "Persona Card" },
       ],
     });
 

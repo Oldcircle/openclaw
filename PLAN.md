@@ -370,6 +370,15 @@ Tail         最高      最终输出指令、CoT 引导        Prompt Profile �
 - 支持加载 `agent-card.json` 或类似格式
 - 没有 Agent Card 时，继续走旧文件槽位
 
+**当前已落地（截至 2026-03-16）**：
+
+- 已支持 workspace 级 `agent-card.yaml` / `agent-card.yml` / `agent-card.json`
+- 已把 `identity` / `personality` / `tone` / `behavior_notes` / `example_dialogues` / `user_relationship` 合成为兼容旧链路的 synthetic `IDENTITY.md` / `SOUL.md` / `USER.md`
+- 兼容策略已生效：Agent Card 定义到的 persona 槽位优先；未定义字段继续回退到旧 `SOUL.md` / `IDENTITY.md` / `USER.md`
+- 已支持 `depth_prompt`，并复用现有 `at_depth` 链路在运行期临时注入历史，不污染持久 session
+- `default_context_book` / `default_prompt_profile` 当前仅作为提示性 metadata 写入 synthetic `SOUL.md`，还未驱动自动挂载
+- 下一步仍是让 `default_context_book` / `default_prompt_profile` 驱动真实默认挂载
+
 ---
 
 ### P3：Prompt Profile 基础版

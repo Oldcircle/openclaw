@@ -626,7 +626,12 @@ export function buildAgentSystemPrompt(params: {
       const hasSoulFile = validContextFiles.some((file) => {
         const normalizedPath = file.path.trim().replace(/\\/g, "/");
         const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
-        return baseName.toLowerCase() === "soul.md";
+        const normalizedLower = normalizedPath.toLowerCase();
+        return (
+          baseName.toLowerCase() === "soul.md" ||
+          normalizedLower.endsWith("#soul.md") ||
+          normalizedLower.endsWith("/soul.md")
+        );
       });
       lines.push("The following project context files have been loaded:");
       if (hasSoulFile) {

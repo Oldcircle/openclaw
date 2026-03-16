@@ -16,7 +16,7 @@
 | ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0   | 基线与可观测性         | 未开始 | 优先记录真实 `/context detail` 基线                                                                                                                                           |
 | P1   | Context Book 基础版    | 进行中 | 已支持 `alwaysActive`、`keywords`、`secondaryKeywords/secondaryLogic`、位置分层、基础预算、`group/groupWeight/at_depth`，以及 `agentIds/channels/chatTypes/sessionKinds` 过滤 |
-| P2   | Agent Card 基础版      | 未开始 | 兼容 `SOUL/IDENTITY/USER`                                                                                                                                                     |
+| P2   | Agent Card 基础版      | 进行中 | 已支持 workspace 级 `agent-card.yaml/yml/json` 最小兼容，替换 `SOUL/IDENTITY/USER` 槽位，并接入 `depth_prompt` 运行期注入                                                     |
 | P3   | Prompt Profile 基础版  | 未开始 | preset-lite，不开放硬权限提升                                                                                                                                                 |
 | P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                          |
 | P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                       |
@@ -33,7 +33,10 @@
 - [x] P1: 扩展到 `at_depth`
 - [x] 把现有 bootstrap 文件清理项并入 P1 的前置整理
 - [ ] 保留工具描述增强 / 尾部提醒作为 P4 的局部先行项
-- [ ] P2/P3: 待 P1 稳定后再进入实现
+- [x] P2: Agent Card 最小兼容骨架（workspace 级 persona 资产优先，旧文件兜底）
+- [x] P2: 扩展 `depth_prompt`
+- [ ] P2: 扩展默认挂载资产等能力
+- [ ] P3: 待 P2 稳定后进入实现
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
 - [ ] trace-viewer: 用真实 Gateway 再验证 running trace 的列表/详情刷新体验
@@ -63,6 +66,23 @@
 - `src/agents/workspace.ts`
   - onboarding 完成后不再为缺失的 `BOOTSTRAP.md` 注入 missing marker
   - 当 workspace 已有 `context-books/` 资产时，不再为缺失的 `SOUL.md / IDENTITY.md / USER.md` 注入 missing marker，减少旧槽位噪音
+- `src/agents/system-prompt-report.ts`
+  - `systemPromptReport` 已新增 `contextBooks` 区块，统计 Project Context 中的 Context Book 条目体积
+- `src/auto-reply/reply/commands-context-report.ts`
+  - `/context list` 与 `/context detail` 已显示 Context Book 摘要、最近一轮命中条目，以及 `at_depth` 条目概览
+- `src/agents/agent-card.ts`
+  - 新增 workspace 级 `Agent Card` 读取，支持 `agent-card.yaml` / `agent-card.yml` / `agent-card.json`
+  - 当前会把 `identity` / `personality` / `tone` / `behavior_notes` / `example_dialogues` / `user_relationship` 合成为兼容旧 bootstrap 槽位的 synthetic `IDENTITY.md` / `SOUL.md` / `USER.md`
+  - 已支持读取 `depth_prompt`，并转换为运行期 `at_depth` 注入条目
+- `src/agents/bootstrap-files.ts`
+  - 当存在 `Agent Card` 时，对应 persona 槽位会优先使用 synthetic bootstrap 文件；未定义字段仍回退到旧 `SOUL.md / IDENTITY.md / USER.md`
+- `src/agents/pi-embedded-runner/run/attempt.ts`
+  - `Agent Card depth_prompt` 已接入运行期，与 `Context Book at_depth` 共用同一条历史注入链路
+- `src/agents/system-prompt.ts`
+  - `Project Context` 中对 `SOUL.md` 的 persona 提示已兼容 synthetic `agent-card.*#SOUL.md` 路径
+- 本地验证补充通过：
+  - `pnpm exec vitest run src/agents/bootstrap-files.test.ts src/agents/system-prompt.test.ts`
+  - `pnpm exec vitest run src/agents/agent-card.test.ts src/agents/pi-embedded-runner/run/attempt.test.ts`
 
 - `extensions/trace-viewer/src/collector.ts`
   - `list()` 现在会把 active trace 和已落盘 trace 合并返回
