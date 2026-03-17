@@ -205,6 +205,59 @@ describe("resolvePromptProfilePromptContext", () => {
     );
     expect(result.appendSystemContext).toContain("Reply tag policy: disabled");
   });
+
+  it("accepts P3 position aliases from the design doc", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-prompt-profile-");
+    const promptProfilesDir = path.join(workspaceDir, DEFAULT_PROMPT_PROFILES_DIRNAME);
+    await fs.mkdir(promptProfilesDir, { recursive: true });
+    await fs.writeFile(
+      path.join(promptProfilesDir, "alias-positions.yaml"),
+      [
+        "modules:",
+        "  - name: Head note",
+        "    position: head",
+        "    content: |",
+        "      Lead with this guidance.",
+        "  - name: After history note",
+        "    position: after_history",
+        "    content: |",
+        "      Add this after the main context.",
+        "  - name: Tail note",
+        "    position: tail",
+        "    content: |",
+        "      Keep this near the end.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await resolvePromptProfilePromptContext({
+      workspaceDir,
+      defaultPromptProfile: "alias-positions",
+    });
+
+    expect(result.prependSystemContext).toContain("[Prompt Profile: alias-positions / Head note]");
+    expect(result.appendSystemContext).toContain(
+      "[Prompt Profile: alias-positions / After history note]",
+    );
+    expect(result.appendSystemContext).toContain("[Prompt Profile: alias-positions / Tail note]");
+    expect(result.moduleEntries).toEqual([
+      expect.objectContaining({
+        name: "Head note",
+        position: "before_context",
+        depth: 0,
+      }),
+      expect.objectContaining({
+        name: "After history note",
+        position: "after_context",
+        depth: 0,
+      }),
+      expect.objectContaining({
+        name: "Tail note",
+        position: "tail_reminder",
+        depth: 0,
+      }),
+    ]);
+  });
 });
 
 describe("mergePromptProfileStreamParams", () => {

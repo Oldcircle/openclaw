@@ -156,8 +156,24 @@ function parseMaxTokens(value: unknown): number | undefined {
 
 function parsePosition(value: unknown): PromptProfilePosition {
   const trimmed = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (trimmed === "before_context" || trimmed === "tail_reminder" || trimmed === "at_depth") {
+  if (
+    trimmed === "before_context" ||
+    trimmed === "head" ||
+    trimmed === "before_history" ||
+    trimmed === "tail_reminder" ||
+    trimmed === "tail" ||
+    trimmed === "at_depth"
+  ) {
+    if (trimmed === "head" || trimmed === "before_history") {
+      return "before_context";
+    }
+    if (trimmed === "tail") {
+      return "tail_reminder";
+    }
     return trimmed;
+  }
+  if (trimmed === "after_history") {
+    return "after_context";
   }
   return "after_context";
 }

@@ -228,7 +228,7 @@ depth_prompt:
 
 **可以配置**（P3 新增）：
 
-- prompt modules 的注入位置偏好（`head` / `before_history` / `after_history` / `tail`）
+- prompt modules 的注入位置偏好（概念层写法：`head` / `before_history` / `after_history` / `tail`；当前 v1 运行时分别映射到 `before_context` / `before_context` / `after_context` / `tail_reminder`）
 - 单个模块的 `depth` 值（距最新消息几条处注入）
 
 **不能配置**：
@@ -392,7 +392,7 @@ Tail         最高      最终输出指令、CoT 引导        Prompt Profile �
 - prompt modules 开关（每个模块有 identifier + enabled + position）
 - 工具组偏好（group:memory, group:web, group:fs）
 - 风格 / 输出格式偏好
-- 基础注入位置（head / before_history / after_history / tail）
+- 基础注入位置（支持概念层别名 `head / before_history / after_history / tail`，运行时归一化到 `before_context / after_context / tail_reminder / at_depth`）
 
 **暂不做**：
 
@@ -423,6 +423,7 @@ OpenClaw 的 P3 只需实现子集：
 - `Agent Card.default_prompt_profile` 驱动真实默认挂载
 - 模块 schema：`enabled` / `content` / `position` / `depth` / `order`
 - 注入位置：`before_context` / `after_context` / `tail_reminder` / `at_depth`
+- 配置兼容：也接受概念层别名 `head` / `before_history` / `after_history` / `tail`
 - 模型参数：`temperature` / `max_tokens`（作为默认值，显式参数优先）
 - 工具范围：`tools.allow` / `tools.deny`（收缩运行时可用工具集）
 - 工具偏好：`tools.prefer`（注入提示区块）

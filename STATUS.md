@@ -80,6 +80,14 @@
 - **本地验证目标**：
   - 覆盖了 CLI 接线、命令层 profile 校验、以及 YAML/JSON Agent Card 写回
 
+### 3/17: P3 位置写法与文档对齐
+
+- **文档核对结论**：
+  - `PLAN.md` 里关于 Prompt Profile position 的概念层写法（`head` / `before_history` / `after_history` / `tail`）和运行时 schema 名称（`before_context` / `after_context` / `tail_reminder` / `at_depth`）原先混在一起，容易让实际配置写错
+- **已继续推进**：
+  - Prompt Profile position 解析现在兼容上述概念层别名，并在运行时归一化到现有 schema
+  - 文档已改成“概念层名称 + 运行时映射”的写法，避免误导后续配置
+
 ### 3/17: 真实 Gateway 端到端验证 + Prompt Profile 工具偏好 / 输出偏好 / final-tag + bugfix
 
 - **首次端到端验证**：从 fork 源码启动 Gateway，通过 Telegram 对话和 `/context detail` 验证 P1 + P2 功能
