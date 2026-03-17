@@ -8,22 +8,22 @@
 | ----------------- | ------ | ------------------------------------------------------------------------- |
 | trace-viewer 插件 | 进行中 | blob store + collector + API 已落地，3/16 已补 active trace live list/get |
 | 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                        |
-| 资产化提示词系统  | 进行中 | `Context Book` P1 已落地多轮迭代，见 `PLAN.md`                            |
+| 资产化提示词系统  | 进行中 | P1 Context Book 已完成，P2 Agent Card 已通过真实 Gateway 验证             |
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                          |
-| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 未开始 | 优先记录真实 `/context detail` 基线                                                                                                                                           |
-| P1   | Context Book 基础版    | 进行中 | 已支持 `alwaysActive`、`keywords`、`secondaryKeywords/secondaryLogic`、位置分层、基础预算、`group/groupWeight/at_depth`，以及 `agentIds/channels/chatTypes/sessionKinds` 过滤 |
-| P2   | Agent Card 基础版      | 进行中 | 已支持 workspace 级 `agent-card.yaml/yml/json` 最小兼容，替换 `SOUL/IDENTITY/USER` 槽位，并接入 `depth_prompt` 运行期注入                                                     |
-| P3   | Prompt Profile 基础版  | 未开始 | preset-lite，不开放硬权限提升                                                                                                                                                 |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                          |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                       |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                     |
+| ---- | ---------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                         |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）     |
+| P2   | Agent Card 基础版      | 进行中 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt），待补 `default_context_book`/`default_prompt_profile` 自动挂载 |
+| P3   | Prompt Profile 基础版  | 未开始 | preset-lite，不开放硬权限提升                                                                                            |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                     |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                  |
 
 ## 当前待办
 
-- [ ] P0: 记录一次真实 `/context detail` 基线
+- [x] P0: 记录一次真实 `/context detail` 基线（3/17 完成）
 - [x] P1: 设计 Context Book schema 和最小实现切入点
 - [x] P1: 扩展到关键词触发
 - [x] P1: 扩展到 `secondaryKeywords/secondaryLogic`
@@ -47,8 +47,26 @@
 - BOOTSTRAP.md 已删除，IDENTITY/SOUL/USER.md 已由"一号"自定义写入
 - 旧版“系统提示词压缩”路线已降级为局部子任务，不再作为主线
 - 新主线是资产化：Agent Card / Context Book / Prompt Profile
+- ~~`loadAgentCardDocument` 返回 `[]` 导致 Agent Card 静默失效~~ → 已修复（3/17，`return []` → `return null`）
+- `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
-## 最新进展（2026-03-16）
+## 最新进展（2026-03-17）
+
+### 3/17: 真实 Gateway 端到端验证 + bugfix
+
+- **首次端到端验证**：从 fork 源码启动 Gateway，通过 Telegram 对话和 `/context detail` 验证 P1 + P2 功能
+- **P1 Context Book 验证通过**：
+  - 常驻条目（`alwaysActive` + `before_context`）正常注入到 bootstrap files
+  - 关键词触发条目正常命中
+  - `tail_reminder` 条目正常命中
+  - `/context detail` 正确显示 Context Book 统计、命中条目、at_depth 概览
+- **P2 Agent Card 验证通过**：
+  - `agent-card.yaml` 被正确读取，synthetic IDENTITY/SOUL/USER 替代了旧文件（体积和内容均变化）
+  - 修改 Agent Card 内容后无需重启 Gateway 即生效（每轮实时读取）
+- **bugfix**: `loadAgentCardDocument` 在文件读取失败时返回 `[]` 而非 `null`，导致 Agent Card 静默失效（已修复并推送）
+- **P0 基线已记录**：通过 `/context detail` 获取了完整的 system prompt 结构基线
+
+### 3/16 及之前
 
 - `src/agents/context-books.ts`
   - 新增 `Context Book` 资产读取与解析
