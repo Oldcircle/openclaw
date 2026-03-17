@@ -11,6 +11,8 @@ describe("resolveAgentCardPromptContext", () => {
       path.join(workspaceDir, "agent-card.yaml"),
       [
         'name: "Researcher"',
+        'default_context_book: "coding-knowledge"',
+        'default_prompt_profile: "deep-think"',
         "depth_prompt:",
         '  content: "Always compare options before deciding."',
         "  depth: 2",
@@ -21,6 +23,8 @@ describe("resolveAgentCardPromptContext", () => {
 
     const result = await resolveAgentCardPromptContext({ workspaceDir });
 
+    expect(result.defaultContextBook).toBe("coding-knowledge");
+    expect(result.defaultPromptProfile).toBe("deep-think");
     expect(result.atDepthEntries).toEqual([
       {
         name: "Researcher depth_prompt",

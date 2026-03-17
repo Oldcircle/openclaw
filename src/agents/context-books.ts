@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Dirent } from "node:fs";
 import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -178,6 +179,32 @@ function parseContextBookDocument(raw: string, sourcePath: string): RawContextBo
   }
 }
 
+function buildContextBookSelectionCandidates(value: string): Set<string> {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return new Set();
+  }
+
+  const candidates = new Set<string>();
+  const normalized = trimmed.toLowerCase();
+  const baseName = path.basename(trimmed).toLowerCase();
+  candidates.add(normalized);
+  candidates.add(baseName);
+  candidates.add(path.basename(baseName, path.extname(baseName)));
+  return candidates;
+}
+
+function matchesSelectedContextBook(fileName: string, selectedContextBook: string): boolean {
+  const candidates = buildContextBookSelectionCandidates(selectedContextBook);
+  if (candidates.size === 0) {
+    return false;
+  }
+
+  const normalizedFileName = fileName.toLowerCase();
+  const normalizedBaseName = path.basename(fileName, path.extname(fileName)).toLowerCase();
+  return candidates.has(normalizedFileName) || candidates.has(normalizedBaseName);
+}
+
 function formatPromptContextEntry(entry: NormalizedContextBookEntry): string {
   return [`[Context Book: ${entry.name}]`, entry.content].join("\n");
 }
@@ -320,11 +347,12 @@ function shouldSkipContextBooks(params: {
 
 async function loadContextBookEntries(params: {
   workspaceDir: string;
+  defaultContextBook?: string;
   warn?: (message: string) => void;
 }): Promise<NormalizedContextBookEntry[]> {
   const workspaceDir = resolveUserPath(params.workspaceDir);
   const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let entries: Dirent[];
   try {
     entries = await fs.readdir(contextBooksDir, { withFileTypes: true });
   } catch (error) {
@@ -341,9 +369,23 @@ async function loadContextBookEntries(params: {
     .map((entry) => entry.name)
     .filter((name) => CONTEXT_BOOK_EXTENSIONS.has(path.extname(name).toLowerCase()))
     .toSorted((a, b) => a.localeCompare(b));
+  const defaultContextBook = params.defaultContextBook?.trim();
+
+  const selectedFiles = defaultContextBook
+    ? files.filter((fileName) => matchesSelectedContextBook(fileName, defaultContextBook))
+    : files;
+  const filesToLoad =
+    selectedFiles.length > 0
+      ? selectedFiles
+      : defaultContextBook
+        ? (params.warn?.(
+            `default context book "${defaultContextBook}" not found in ${contextBooksDir}; loading all Context Books`,
+          ),
+          files)
+        : files;
 
   const normalizedEntries: NormalizedContextBookEntry[] = [];
-  for (const fileName of files) {
+  for (const fileName of filesToLoad) {
     const filePath = path.join(contextBooksDir, fileName);
     const raw = await readContextBookFile({
       workspaceDir,
@@ -454,7 +496,10 @@ function matchesOptionalFilter(filterValues: string[], actualValue: string | und
     return true;
   }
   const normalized = actualValue?.trim().toLowerCase();
-  return Boolean(normalized) && filterValues.includes(normalized);
+  if (!normalized) {
+    return false;
+  }
+  return filterValues.includes(normalized);
 }
 
 function matchesSessionKindFilter(
@@ -631,6 +676,7 @@ export async function loadContextBookBootstrapFiles(params: {
   workspaceDir: string;
   sessionKey?: string;
   agentId?: string;
+  defaultContextBook?: string;
   contextMode?: BootstrapContextMode;
   runKind?: BootstrapContextRunKind;
   warn?: (message: string) => void;
@@ -641,6 +687,7 @@ export async function loadContextBookBootstrapFiles(params: {
 
   const entries = await loadContextBookEntries({
     workspaceDir: params.workspaceDir,
+    defaultContextBook: params.defaultContextBook,
     warn: params.warn,
   });
   const matchedEntries = applyContextBookGroups({
@@ -676,6 +723,7 @@ export async function resolveContextBookPromptContext(params: {
   sessionKey?: string;
   agentId?: string;
   channelId?: string;
+  defaultContextBook?: string;
   contextMode?: BootstrapContextMode;
   runKind?: BootstrapContextRunKind;
   maxChars?: number;
@@ -687,6 +735,7 @@ export async function resolveContextBookPromptContext(params: {
 
   const entries = await loadContextBookEntries({
     workspaceDir: params.workspaceDir,
+    defaultContextBook: params.defaultContextBook,
     warn: params.warn,
   });
   if (entries.length === 0) {

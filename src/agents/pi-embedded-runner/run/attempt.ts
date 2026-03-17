@@ -2420,6 +2420,7 @@ export async function runEmbeddedAttempt(
           sessionKey: params.sessionKey,
           agentId: hookAgentId,
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
+          defaultContextBook: agentCardPromptContext.defaultContextBook,
           messages: activeSession.messages,
           warn: (message) => log.warn(`context-books: ${message}`),
         });
@@ -2435,8 +2436,14 @@ export async function runEmbeddedAttempt(
           hookRunner,
           legacyBeforeAgentStartResult: params.legacyBeforeAgentStartResult,
         });
+        const existingContextBookReport = systemPromptReport.contextBooks ?? {
+          projectContextChars: 0,
+          projectContextEntries: [],
+          matchedEntryNames: [],
+          atDepthEntries: [],
+        };
         systemPromptReport.contextBooks = {
-          ...systemPromptReport.contextBooks,
+          ...existingContextBookReport,
           matchedEntryNames: contextBookPromptContext.matchedEntryNames,
           atDepthEntries: contextBookPromptContext.atDepthEntries.map((entry) => ({
             name: entry.name,

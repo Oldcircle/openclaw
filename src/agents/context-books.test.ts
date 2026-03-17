@@ -136,6 +136,48 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(result.matchedEntryNames).toEqual(["Mid-history reminder", "Tail reminder"]);
   });
 
+  it("limits prompt-context loading to the selected default Context Book", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "coding-knowledge.yaml"),
+      [
+        "entries:",
+        "  - name: Coding helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      keep fixes small",
+      ].join("\n"),
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(contextBooksDir, "research.yaml"),
+      [
+        "entries:",
+        "  - name: Research helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      compare multiple sources",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      defaultContextBook: "coding-knowledge",
+      messages: [{ role: "user", content: "vite build issue" }],
+    });
+
+    expect(result.appendSystemContext).toContain("[Context Book: Coding helper]");
+    expect(result.appendSystemContext).not.toContain("[Context Book: Research helper]");
+    expect(result.matchedEntryNames).toEqual(["Coding helper"]);
+  });
+
   it("enforces prompt-context budget by skipping lower-priority entries unless ignoreBudget is set", async () => {
     const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
     const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);

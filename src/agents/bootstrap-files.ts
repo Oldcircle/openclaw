@@ -1,5 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
-import { loadAgentCardBootstrapFiles } from "./agent-card.js";
+import { resolveAgentCardBootstrapState } from "./agent-card.js";
 import { getOrLoadBootstrapFiles } from "./bootstrap-cache.js";
 import { applyBootstrapHookOverrides } from "./bootstrap-hooks.js";
 import { loadContextBookBootstrapFiles } from "./context-books.js";
@@ -80,14 +80,17 @@ export async function resolveBootstrapFilesForRun(params: {
         sessionKey: params.sessionKey,
       })
     : await loadWorkspaceBootstrapFiles(params.workspaceDir);
-  const agentCardFiles = await loadAgentCardBootstrapFiles({
+  const agentCard = await resolveAgentCardBootstrapState({
     workspaceDir: params.workspaceDir,
     warn: params.warn,
   });
-  const replacedLegacyNames = new Set(agentCardFiles.map((file) => file.name));
+  const replacedLegacyNames = new Set(agentCard.bootstrapFiles.map((file) => file.name));
   const bootstrapFiles = applyContextModeFilter({
     files: filterBootstrapFilesForSession(
-      [...rawFiles.filter((file) => !replacedLegacyNames.has(file.name)), ...agentCardFiles],
+      [
+        ...rawFiles.filter((file) => !replacedLegacyNames.has(file.name)),
+        ...agentCard.bootstrapFiles,
+      ],
       sessionKey,
     ),
     contextMode: params.contextMode,
@@ -97,6 +100,7 @@ export async function resolveBootstrapFilesForRun(params: {
     workspaceDir: params.workspaceDir,
     sessionKey,
     agentId: params.agentId,
+    defaultContextBook: agentCard.defaults.defaultContextBook,
     contextMode: params.contextMode,
     runKind: params.runKind,
     warn: params.warn,

@@ -227,6 +227,49 @@ describe("resolveBootstrapContextForRun", () => {
     expect(injected?.content).toBe("Use pnpm");
   });
 
+  it("uses Agent Card default_context_book to choose the default bootstrap Context Book", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
+    await fs.mkdir(path.join(workspaceDir, "context-books"), { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceDir, "agent-card.yaml"),
+      ['default_context_book: "coding-knowledge"'].join("\n"),
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "context-books", "coding-knowledge.yaml"),
+      [
+        "entries:",
+        "  - name: Coding rules",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    content: |",
+        "      Use pnpm",
+      ].join("\n"),
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(workspaceDir, "context-books", "research.yaml"),
+      [
+        "entries:",
+        "  - name: Research rules",
+        "    enabled: true",
+        "    alwaysActive: true",
+        "    content: |",
+        "      Compare sources",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await resolveBootstrapContextForRun({ workspaceDir });
+
+    expect(result.bootstrapFiles.some((file) => file.name === "CONTEXT_BOOK:Coding rules")).toBe(
+      true,
+    );
+    expect(result.bootstrapFiles.some((file) => file.name === "CONTEXT_BOOK:Research rules")).toBe(
+      false,
+    );
+  });
+
   it("skips Context Book entries for subagent sessions", async () => {
     const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-");
     await fs.mkdir(path.join(workspaceDir, "context-books"), { recursive: true });

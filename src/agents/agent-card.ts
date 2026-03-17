@@ -17,12 +17,19 @@ const AGENT_CARD_MAX_FILE_BYTES = 256 * 1024;
 type RawAgentCard = Record<string, unknown>;
 
 export type AgentCardPromptContext = {
+  defaultContextBook?: string;
+  defaultPromptProfile?: string;
   atDepthEntries: Array<{
     name: string;
     content: string;
     depth: number;
   }>;
 };
+
+export type AgentCardDefaults = Pick<
+  AgentCardPromptContext,
+  "defaultContextBook" | "defaultPromptProfile"
+>;
 
 type LoadedAgentCard = {
   sourcePath: string;
@@ -135,8 +142,7 @@ function buildSoulSection(card: RawAgentCard, sourcePath: string): WorkspaceBoot
   const tone = parseString(card.tone);
   const behaviorNotes = parseStringArray(card.behavior_notes);
   const exampleDialogues = parseString(card.example_dialogues);
-  const defaultContextBook = parseString(card.default_context_book);
-  const defaultPromptProfile = parseString(card.default_prompt_profile);
+  const { defaultContextBook, defaultPromptProfile } = extractAgentCardDefaults(card);
   const lines = [
     "# SOUL.md - Agent Card",
     personality ? ["## Personality", personality, ""].join("\n") : "",
@@ -200,6 +206,19 @@ function buildDepthPromptEntry(
   };
 }
 
+function extractAgentCardDefaults(card: RawAgentCard): AgentCardDefaults {
+  if (!isRecord(card)) {
+    return {};
+  }
+
+  const defaultContextBook = parseString(card.default_context_book) || undefined;
+  const defaultPromptProfile = parseString(card.default_prompt_profile) || undefined;
+  return {
+    defaultContextBook,
+    defaultPromptProfile,
+  };
+}
+
 async function loadAgentCardDocument(params: {
   workspaceDir: string;
   warn?: (message: string) => void;
@@ -255,6 +274,31 @@ export async function loadAgentCardBootstrapFiles(params: {
   ].filter((entry): entry is WorkspaceBootstrapFile => Boolean(entry));
 }
 
+export async function resolveAgentCardBootstrapState(params: {
+  workspaceDir: string;
+  warn?: (message: string) => void;
+}): Promise<{
+  bootstrapFiles: WorkspaceBootstrapFile[];
+  defaults: AgentCardDefaults;
+}> {
+  const loaded = await loadAgentCardDocument(params);
+  if (!loaded) {
+    return {
+      bootstrapFiles: [],
+      defaults: {},
+    };
+  }
+
+  return {
+    bootstrapFiles: [
+      buildIdentitySection(loaded.card, loaded.sourcePath),
+      buildSoulSection(loaded.card, loaded.sourcePath),
+      buildUserSection(loaded.card, loaded.sourcePath),
+    ].filter((entry): entry is WorkspaceBootstrapFile => Boolean(entry)),
+    defaults: extractAgentCardDefaults(loaded.card),
+  };
+}
+
 export async function resolveAgentCardPromptContext(params: {
   workspaceDir: string;
   warn?: (message: string) => void;
@@ -265,6 +309,7 @@ export async function resolveAgentCardPromptContext(params: {
   }
 
   return {
+    ...extractAgentCardDefaults(loaded.card),
     atDepthEntries: [buildDepthPromptEntry(loaded.card, loaded.sourcePath)].filter(
       (entry): entry is AgentCardPromptContext["atDepthEntries"][number] => Boolean(entry),
     ),
