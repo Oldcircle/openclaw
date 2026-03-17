@@ -158,6 +158,7 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const promptProfileToolAllow = promptProfile?.toolPolicy?.allow ?? [];
   const promptProfileToolDeny = promptProfile?.toolPolicy?.deny ?? [];
   const promptProfilePreferredTools = promptProfile?.preferredTools ?? [];
+  const promptProfileOutputPreferences = promptProfile?.outputPreferences;
   const contextBooksLine = contextBookProjectEntries.length
     ? `Context Books (Project Context): ${contextBookProjectEntries.length} entries / ${formatCharsAndTokens(report.contextBooks?.projectContextChars ?? 0)}`
     : "Context Books (Project Context): none";
@@ -201,6 +202,21 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const promptProfilePreferredToolsLine = promptProfilePreferredTools.length
     ? `Prompt Profile preferred tools: ${formatNameList(promptProfilePreferredTools, 12)}`
     : undefined;
+  const promptProfileOutputFormatLine = promptProfileOutputPreferences?.format
+    ? `Prompt Profile output format: ${promptProfileOutputPreferences.format}`
+    : undefined;
+  const promptProfileOutputSectionsLine =
+    promptProfileOutputPreferences && promptProfileOutputPreferences.sections.length > 0
+      ? `Prompt Profile output sections: ${formatNameList(promptProfileOutputPreferences.sections, 12)}`
+      : undefined;
+  const promptProfileOutputStyleLine =
+    promptProfileOutputPreferences && promptProfileOutputPreferences.style.length > 0
+      ? `Prompt Profile output style: ${formatNameList(promptProfileOutputPreferences.style, 12)}`
+      : undefined;
+  const promptProfileOutputRulesLine =
+    promptProfileOutputPreferences && promptProfileOutputPreferences.rules.length > 0
+      ? `Prompt Profile output rules: ${formatNameList(promptProfileOutputPreferences.rules, 12)}`
+      : undefined;
   const promptProfileMatchedLine = promptProfileMatchedModuleNames.length
     ? `Active Prompt Profile modules: ${formatNameList(promptProfileMatchedModuleNames, 12)}`
     : report.source === "run" && promptProfile?.profileName
@@ -283,6 +299,10 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ...(promptProfileStreamParamsLine ? [promptProfileStreamParamsLine] : []),
     ...(promptProfileToolScopeLine ? [promptProfileToolScopeLine] : []),
     ...(promptProfilePreferredToolsLine ? [promptProfilePreferredToolsLine] : []),
+    ...(promptProfileOutputFormatLine ? [promptProfileOutputFormatLine] : []),
+    ...(promptProfileOutputSectionsLine ? [promptProfileOutputSectionsLine] : []),
+    ...(promptProfileOutputStyleLine ? [promptProfileOutputStyleLine] : []),
+    ...(promptProfileOutputRulesLine ? [promptProfileOutputRulesLine] : []),
     ...(promptProfileMatchedLine ? [promptProfileMatchedLine] : []),
     ...(promptProfileAtDepthLine ? [promptProfileAtDepthLine] : []),
     "",

@@ -2480,6 +2480,7 @@ export async function runEmbeddedAttempt(
             streamParams: promptProfilePromptContext.streamParams,
             toolPolicy: promptProfilePromptContext.toolPolicy,
             preferredTools: promptProfilePromptContext.preferredTools,
+            outputPreferences: promptProfilePromptContext.outputPreferences,
             matchedModuleNames: promptProfilePromptContext.matchedModuleNames,
             moduleEntries: promptProfilePromptContext.moduleEntries,
             atDepthEntries: promptProfilePromptContext.atDepthEntries.map((entry) => ({

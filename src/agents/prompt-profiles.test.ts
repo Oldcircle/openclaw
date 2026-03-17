@@ -28,6 +28,17 @@ describe("resolvePromptProfilePromptContext", () => {
         "  prefer:",
         "    - web_search",
         "    - group:web",
+        "output:",
+        "  format: markdown",
+        "  sections:",
+        "    - Summary",
+        "    - Risks",
+        "  style:",
+        "    - concise",
+        "    - comparison-first",
+        "  rules:",
+        "    - Include a recommendation at the end.",
+        "    - Call out blockers explicitly.",
         "modules:",
         "  - name: Analysis frame",
         "    enabled: true",
@@ -65,12 +76,25 @@ describe("resolvePromptProfilePromptContext", () => {
       deny: ["memory_get"],
     });
     expect(result.preferredTools).toEqual(["web_search", "group:web"]);
+    expect(result.outputPreferences).toEqual({
+      format: "markdown",
+      sections: ["Summary", "Risks"],
+      style: ["concise", "comparison-first"],
+      rules: ["Include a recommendation at the end.", "Call out blockers explicitly."],
+    });
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Analysis frame]");
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Final answer]");
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Tool Preferences]");
     expect(result.appendSystemContext).toContain(
+      "[Prompt Profile: Deep Think / Output Preferences]",
+    );
+    expect(result.appendSystemContext).toContain(
       "Prefer these tools or tool groups when relevant: web_search, group:web",
     );
+    expect(result.appendSystemContext).toContain("Preferred output format: markdown");
+    expect(result.appendSystemContext).toContain("Preferred sections: Summary, Risks");
+    expect(result.appendSystemContext).toContain("Preferred style: concise, comparison-first");
+    expect(result.appendSystemContext).toContain("- Include a recommendation at the end.");
     expect(result.matchedModuleNames).toEqual([
       "Analysis frame",
       "Final answer",
@@ -128,6 +152,42 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.preferredTools).toEqual(["web_search"]);
     expect(result.matchedModuleNames).toEqual([]);
     expect(result.appendSystemContext).toContain("[Prompt Profile: Tooling / Tool Preferences]");
+  });
+
+  it("supports output preferences without prompt modules", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-prompt-profile-");
+    const promptProfilesDir = path.join(workspaceDir, DEFAULT_PROMPT_PROFILES_DIRNAME);
+    await fs.mkdir(promptProfilesDir, { recursive: true });
+    await fs.writeFile(
+      path.join(promptProfilesDir, "formatting.yaml"),
+      [
+        'name: "Formatting"',
+        "output:",
+        "  format: json",
+        "  sections:",
+        "    - answer",
+        "  rules:",
+        "    - Return valid JSON only.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await resolvePromptProfilePromptContext({
+      workspaceDir,
+      defaultPromptProfile: "formatting",
+    });
+
+    expect(result.profileName).toBe("Formatting");
+    expect(result.outputPreferences).toEqual({
+      format: "json",
+      sections: ["answer"],
+      style: [],
+      rules: ["Return valid JSON only."],
+    });
+    expect(result.appendSystemContext).toContain(
+      "[Prompt Profile: Formatting / Output Preferences]",
+    );
+    expect(result.appendSystemContext).toContain("Preferred output format: json");
   });
 });
 

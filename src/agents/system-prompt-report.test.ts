@@ -137,6 +137,12 @@ describe("buildSystemPromptReport", () => {
           deny: ["memory_get"],
         },
         preferredTools: ["web_search", "group:web"],
+        outputPreferences: {
+          format: "markdown",
+          sections: ["Summary", "Risks"],
+          style: ["concise"],
+          rules: ["End with a recommendation."],
+        },
         matchedModuleNames: ["Analysis frame", "Final answer"],
         moduleEntries: [
           { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },
@@ -167,6 +173,12 @@ describe("buildSystemPromptReport", () => {
         deny: ["memory_get"],
       },
       preferredTools: ["web_search", "group:web"],
+      outputPreferences: {
+        format: "markdown",
+        sections: ["Summary", "Risks"],
+        style: ["concise"],
+        rules: ["End with a recommendation."],
+      },
       matchedModuleNames: ["Analysis frame", "Final answer"],
       moduleEntries: [
         { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },

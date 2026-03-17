@@ -46,6 +46,12 @@ type LoadedPromptProfile = {
     deny?: string[];
   };
   preferredTools: string[];
+  outputPreferences?: {
+    format?: string;
+    sections: string[];
+    style: string[];
+    rules: string[];
+  };
 };
 
 export type PromptProfilePromptContext = {
@@ -59,6 +65,12 @@ export type PromptProfilePromptContext = {
     deny?: string[];
   };
   preferredTools: string[];
+  outputPreferences?: {
+    format?: string;
+    sections: string[];
+    style: string[];
+    rules: string[];
+  };
   atDepthEntries: Array<{
     name: string;
     content: string;
@@ -252,6 +264,41 @@ function resolvePromptProfileToolConfig(document: RawPromptProfileDocument): {
   };
 }
 
+function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocument): {
+  outputPreferences?: {
+    format?: string;
+    sections: string[];
+    style: string[];
+    rules: string[];
+  };
+} {
+  if (Array.isArray(document) || !isRecord(document)) {
+    return {};
+  }
+  const output = isRecord(document.output) ? document.output : null;
+  if (!output) {
+    return {};
+  }
+
+  const format = parseString(output.format) || undefined;
+  const sections = parseStringArray(output.sections);
+  const style = parseStringArray(output.style);
+  const rules = parseStringArray(output.rules);
+
+  if (!format && sections.length === 0 && style.length === 0 && rules.length === 0) {
+    return {};
+  }
+
+  return {
+    outputPreferences: {
+      format,
+      sections,
+      style,
+      rules,
+    },
+  };
+}
+
 function normalizeModuleName(rawName: unknown, sourcePath: string, index: number): string {
   const trimmed = parseString(rawName);
   if (trimmed) {
@@ -371,6 +418,7 @@ async function loadSelectedPromptProfile(params: {
     modules: normalizePromptProfileModules(parsed, sourcePath, params.warn),
     streamParams: resolvePromptProfileStreamParams(parsed),
     ...resolvePromptProfileToolConfig(parsed),
+    ...resolvePromptProfileOutputPreferences(parsed),
   };
 }
 
@@ -418,6 +466,33 @@ function buildPromptProfileToolPreferencesSection(params: {
   ].join("\n");
 }
 
+function buildPromptProfileOutputPreferencesSection(params: {
+  profileName: string;
+  outputPreferences?: {
+    format?: string;
+    sections: string[];
+    style: string[];
+    rules: string[];
+  };
+}): string | undefined {
+  const preferences = params.outputPreferences;
+  if (!preferences) {
+    return undefined;
+  }
+
+  const lines = [
+    `[Prompt Profile: ${params.profileName} / Output Preferences]`,
+    preferences.format ? `Preferred output format: ${preferences.format}` : "",
+    preferences.sections.length > 0 ? `Preferred sections: ${preferences.sections.join(", ")}` : "",
+    preferences.style.length > 0 ? `Preferred style: ${preferences.style.join(", ")}` : "",
+    preferences.rules.length > 0
+      ? ["Output rules:", ...preferences.rules.map((rule) => `- ${rule}`)].join("\n")
+      : "",
+  ].filter(Boolean);
+
+  return lines.length > 1 ? lines.join("\n") : undefined;
+}
+
 export async function resolvePromptProfilePromptContext(params: {
   workspaceDir: string;
   defaultPromptProfile?: string;
@@ -454,6 +529,10 @@ export async function resolvePromptProfilePromptContext(params: {
         profileName: loaded.profileName,
         preferredTools: loaded.preferredTools,
       }),
+      buildPromptProfileOutputPreferencesSection({
+        profileName: loaded.profileName,
+        outputPreferences: loaded.outputPreferences,
+      }),
     ].filter(Boolean),
   );
   const atDepthEntries = loaded.modules
@@ -476,6 +555,7 @@ export async function resolvePromptProfilePromptContext(params: {
     streamParams: loaded.streamParams,
     toolPolicy: loaded.toolPolicy,
     preferredTools: loaded.preferredTools,
+    outputPreferences: loaded.outputPreferences,
     atDepthEntries,
     matchedModuleNames: loaded.modules.map((module) => module.name),
     moduleEntries: loaded.modules.map((module) => ({

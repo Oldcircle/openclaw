@@ -81,6 +81,12 @@ function makeParams(
                 deny: ["memory_get"],
               },
               preferredTools: ["web_search", "group:web"],
+              outputPreferences: {
+                format: "markdown",
+                sections: ["Summary", "Risks"],
+                style: ["concise"],
+                rules: ["End with a recommendation."],
+              },
               matchedModuleNames: ["Analysis frame", "Final answer", "Mid-history reminder"],
               moduleEntries: [
                 {
@@ -173,6 +179,10 @@ describe("buildContextReply", () => {
       "Prompt Profile tool scope: allow=group:web, read; deny=memory_get",
     );
     expect(result.text).toContain("Prompt Profile preferred tools: web_search, group:web");
+    expect(result.text).toContain("Prompt Profile output format: markdown");
+    expect(result.text).toContain("Prompt Profile output sections: Summary, Risks");
+    expect(result.text).toContain("Prompt Profile output style: concise");
+    expect(result.text).toContain("Prompt Profile output rules: End with a recommendation.");
     expect(result.text).toContain(
       "Active Prompt Profile modules: Analysis frame, Final answer, Mid-history reminder",
     );

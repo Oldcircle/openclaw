@@ -390,6 +390,12 @@ export type SessionSystemPromptReport = {
       deny?: string[];
     };
     preferredTools: string[];
+    outputPreferences?: {
+      format?: string;
+      sections: string[];
+      style: string[];
+      rules: string[];
+    };
     matchedModuleNames: string[];
     moduleEntries: Array<{
       name: string;

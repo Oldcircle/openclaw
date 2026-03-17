@@ -6,6 +6,23 @@
 
 ## 2026-03-17
 
+### Prompt Profile：结构化输出偏好
+
+- 修改 `src/agents/prompt-profiles.ts`
+  - 新增 `output.format` / `output.sections` / `output.style` / `output.rules` 解析
+  - 结构化输出偏好会生成独立的 Prompt Profile Output Preferences 区块注入 system context
+- 修改 `src/agents/system-prompt-report.ts`、`src/auto-reply/reply/commands-context-report.ts`
+  - `/context detail` 新增 Prompt Profile output preferences 可观测性
+- 补充测试：
+  - `src/agents/prompt-profiles.test.ts`
+  - `src/agents/system-prompt-report.test.ts`
+  - `src/auto-reply/reply/commands-context-report.test.ts`
+
+### 验证
+
+- `pnpm exec vitest run src/agents/prompt-profiles.test.ts src/agents/system-prompt-report.test.ts src/auto-reply/reply/commands-context-report.test.ts src/auto-reply/reply/commands-system-prompt.test.ts`
+- `pnpm exec vitest run src/agents/pi-embedded-runner/run/attempt.test.ts src/agents/pi-tools-agent-config.test.ts`
+
 ### Prompt Profile：工具范围收缩 + 工具偏好
 
 - 修改 `src/agents/prompt-profiles.ts`
