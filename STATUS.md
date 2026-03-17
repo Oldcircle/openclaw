@@ -8,7 +8,7 @@
 | ----------------- | ------ | ------------------------------------------------------------------------- |
 | trace-viewer 插件 | 进行中 | blob store + collector + API 已落地，3/16 已补 active trace live list/get |
 | 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                        |
-| 资产化提示词系统  | 进行中 | P1 Context Book 已完成，P2 Agent Card 已通过真实 Gateway 验证             |
+| 资产化提示词系统  | 进行中 | P0-P2 已完成，P3 Prompt Profile 接近完成（模块/参数/工具/输出/final-tag） |
 
 ## 资产化提示词系统进度
 

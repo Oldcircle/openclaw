@@ -370,14 +370,15 @@ Tail         最高      最终输出指令、CoT 引导        Prompt Profile �
 - 支持加载 `agent-card.json` 或类似格式
 - 没有 Agent Card 时，继续走旧文件槽位
 
-**当前已落地（截至 2026-03-16）**：
+**当前已落地（截至 2026-03-17）**：
 
 - 已支持 workspace 级 `agent-card.yaml` / `agent-card.yml` / `agent-card.json`
 - 已把 `identity` / `personality` / `tone` / `behavior_notes` / `example_dialogues` / `user_relationship` 合成为兼容旧链路的 synthetic `IDENTITY.md` / `SOUL.md` / `USER.md`
 - 兼容策略已生效：Agent Card 定义到的 persona 槽位优先；未定义字段继续回退到旧 `SOUL.md` / `IDENTITY.md` / `USER.md`
 - 已支持 `depth_prompt`，并复用现有 `at_depth` 链路在运行期临时注入历史，不污染持久 session
-- `default_context_book` / `default_prompt_profile` 当前仅作为提示性 metadata 写入 synthetic `SOUL.md`，还未驱动自动挂载
-- 下一步仍是让 `default_context_book` / `default_prompt_profile` 驱动真实默认挂载
+- `default_context_book` 已驱动真实默认挂载：bootstrap 和运行期注入都会优先加载指定的 Context Book
+- `default_prompt_profile` 已驱动真实默认挂载：自动选择并加载对应的 Prompt Profile
+- 3/17 通过真实 Gateway + Telegram 端到端验证：persona 替代、depth_prompt、default_context_book 均确认生效
 
 ---
 
@@ -415,6 +416,21 @@ OpenClaw 的 P3 只需实现子集：
 - CLI 命令切换 profile：`openclaw profile use deep-think`
 - 配置文件中声明模块开关（不需要 UI 拖拽排序）
 - `/context detail` 显示每个模块的 enabled 状态和 token 占用
+
+**当前已落地（截至 2026-03-17）**：
+
+- workspace 级 `prompt-profiles/*.yaml|yml|json` 资产读取与解析
+- `Agent Card.default_prompt_profile` 驱动真实默认挂载
+- 模块 schema：`enabled` / `content` / `position` / `depth` / `order`
+- 注入位置：`before_context` / `after_context` / `tail_reminder` / `at_depth`
+- 模型参数：`temperature` / `max_tokens`（作为默认值，显式参数优先）
+- 工具范围：`tools.allow` / `tools.deny`（收缩运行时可用工具集）
+- 工具偏好：`tools.prefer`（注入提示区块）
+- 输出偏好：`output.format` / `output.sections` / `output.style` / `output.rules`
+- 运行时行为：`output.require_final_tag`（接通 `<final>` 严格模式）
+- 可观测性：`/context detail` 显示 profile 名称、模块、参数、工具范围、输出偏好
+- 3/17 通过真实 Gateway + Telegram 端到端验证
+- 待补：reply tags 细粒度控制、CLI `openclaw profile use` 切换命令
 
 ---
 
