@@ -1547,6 +1547,15 @@ export async function runEmbeddedAttempt(
       config: params.config,
       agentId: params.agentId,
     });
+    const agentCardPromptContext = await resolveAgentCardPromptContext({
+      workspaceDir: effectiveWorkspace,
+      warn: (message) => log.warn(`agent-card: ${message}`),
+    });
+    const promptProfilePromptContext = await resolvePromptProfilePromptContext({
+      workspaceDir: effectiveWorkspace,
+      defaultPromptProfile: agentCardPromptContext.defaultPromptProfile,
+      warn: (message) => log.warn(`prompt-profiles: ${message}`),
+    });
     const effectiveFsWorkspaceOnly = resolveAttemptFsWorkspaceOnly({
       config: params.config,
       sessionAgentId,
@@ -1606,6 +1615,7 @@ export async function runEmbeddedAttempt(
           requireExplicitMessageTarget:
             params.requireExplicitMessageTarget ?? isSubagentSessionKey(params.sessionKey),
           disableMessageTool: params.disableMessageTool,
+          promptProfileToolPolicy: promptProfilePromptContext.toolPolicy,
           onYield: (message) => {
             yieldDetected = true;
             yieldMessage = message;
@@ -1780,6 +1790,7 @@ export async function runEmbeddedAttempt(
       systemPrompt: appendPrompt,
       bootstrapFiles: hookAdjustedBootstrapFiles,
       injectedFiles: contextFiles,
+      promptProfileContext: promptProfilePromptContext,
       skillsPrompt,
       tools,
     });
@@ -2421,10 +2432,6 @@ export async function runEmbeddedAttempt(
           trigger: params.trigger,
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
         };
-        const agentCardPromptContext = await resolveAgentCardPromptContext({
-          workspaceDir: params.workspaceDir,
-          warn: (message) => log.warn(`agent-card: ${message}`),
-        });
         const contextBookPromptContext = await resolveContextBookPromptContext({
           workspaceDir: params.workspaceDir,
           sessionKey: params.sessionKey,
@@ -2433,11 +2440,6 @@ export async function runEmbeddedAttempt(
           defaultContextBook: agentCardPromptContext.defaultContextBook,
           messages: activeSession.messages,
           warn: (message) => log.warn(`context-books: ${message}`),
-        });
-        const promptProfilePromptContext = await resolvePromptProfilePromptContext({
-          workspaceDir: params.workspaceDir,
-          defaultPromptProfile: agentCardPromptContext.defaultPromptProfile,
-          warn: (message) => log.warn(`prompt-profiles: ${message}`),
         });
         const atDepthEntries = [
           ...agentCardPromptContext.atDepthEntries,
@@ -2476,6 +2478,8 @@ export async function runEmbeddedAttempt(
               0,
             ),
             streamParams: promptProfilePromptContext.streamParams,
+            toolPolicy: promptProfilePromptContext.toolPolicy,
+            preferredTools: promptProfilePromptContext.preferredTools,
             matchedModuleNames: promptProfilePromptContext.matchedModuleNames,
             moduleEntries: promptProfilePromptContext.moduleEntries,
             atDepthEntries: promptProfilePromptContext.atDepthEntries.map((entry) => ({

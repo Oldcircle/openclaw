@@ -55,6 +55,7 @@ import {
   collectExplicitAllowlist,
   mergeAlsoAllowPolicy,
   resolveToolProfilePolicy,
+  type ToolPolicyLike,
 } from "./tool-policy.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
@@ -269,6 +270,8 @@ export function createOpenClawCodingTools(options?: {
   senderIsOwner?: boolean;
   /** Callback invoked when sessions_yield tool is called. */
   onYield?: (message: string) => Promise<void> | void;
+  /** Prompt Profile tool scope can only further restrict the final tool set. */
+  promptProfileToolPolicy?: ToolPolicyLike;
 }): AnyAgentTool[] {
   const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
@@ -585,6 +588,7 @@ export function createOpenClawCodingTools(options?: {
         groupPolicy,
         agentId,
       }),
+      { policy: options?.promptProfileToolPolicy, label: "prompt profile tools" },
       { policy: sandbox?.tools, label: "sandbox tools.allow" },
       { policy: subagentPolicy, label: "subagent tools.allow" },
     ],

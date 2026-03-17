@@ -19,6 +19,15 @@ describe("resolvePromptProfilePromptContext", () => {
         'name: "Deep Think"',
         "temperature: 0.2",
         "max_tokens: 4096",
+        "tools:",
+        "  allow:",
+        "    - group:web",
+        "    - read",
+        "  deny:",
+        "    - memory_get",
+        "  prefer:",
+        "    - web_search",
+        "    - group:web",
         "modules:",
         "  - name: Analysis frame",
         "    enabled: true",
@@ -51,8 +60,17 @@ describe("resolvePromptProfilePromptContext", () => {
       temperature: 0.2,
       maxTokens: 4096,
     });
+    expect(result.toolPolicy).toEqual({
+      allow: ["group:web", "read"],
+      deny: ["memory_get"],
+    });
+    expect(result.preferredTools).toEqual(["web_search", "group:web"]);
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Analysis frame]");
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Final answer]");
+    expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Tool Preferences]");
+    expect(result.appendSystemContext).toContain(
+      "Prefer these tools or tool groups when relevant: web_search, group:web",
+    );
     expect(result.matchedModuleNames).toEqual([
       "Analysis frame",
       "Final answer",
@@ -77,9 +95,39 @@ describe("resolvePromptProfilePromptContext", () => {
       warn: (message) => warnings.push(message),
     });
 
+    expect(result.preferredTools).toEqual([]);
     expect(result.matchedModuleNames).toEqual([]);
     expect(result.moduleEntries).toEqual([]);
     expect(warnings[0]).toContain('default prompt profile "deep-think"');
+  });
+
+  it("keeps Prompt Profile tool preferences even when no prompt modules are defined", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-prompt-profile-");
+    const promptProfilesDir = path.join(workspaceDir, DEFAULT_PROMPT_PROFILES_DIRNAME);
+    await fs.mkdir(promptProfilesDir, { recursive: true });
+    await fs.writeFile(
+      path.join(promptProfilesDir, "tooling.yaml"),
+      [
+        'name: "Tooling"',
+        "tools:",
+        "  allow:",
+        "    - group:web",
+        "  prefer:",
+        "    - web_search",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await resolvePromptProfilePromptContext({
+      workspaceDir,
+      defaultPromptProfile: "tooling",
+    });
+
+    expect(result.profileName).toBe("Tooling");
+    expect(result.toolPolicy).toEqual({ allow: ["group:web"] });
+    expect(result.preferredTools).toEqual(["web_search"]);
+    expect(result.matchedModuleNames).toEqual([]);
+    expect(result.appendSystemContext).toContain("[Prompt Profile: Tooling / Tool Preferences]");
   });
 });
 

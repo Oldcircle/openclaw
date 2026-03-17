@@ -7,6 +7,7 @@ import type { AgentStreamParams } from "../commands/agent/types.js";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { joinPresentTextSegments } from "../shared/text/join-segments.js";
 import { resolveUserPath } from "../utils.js";
+import { normalizeToolList } from "./tool-policy.js";
 
 export const DEFAULT_PROMPT_PROFILES_DIRNAME = "prompt-profiles";
 
@@ -22,6 +23,7 @@ type RawPromptProfileDocument =
       max_tokens?: unknown;
       maxTokens?: unknown;
       modules?: unknown;
+      tools?: unknown;
     }
   | unknown[];
 
@@ -39,6 +41,11 @@ type LoadedPromptProfile = {
   sourcePath: string;
   modules: NormalizedPromptProfileModule[];
   streamParams: AgentStreamParams;
+  toolPolicy?: {
+    allow?: string[];
+    deny?: string[];
+  };
+  preferredTools: string[];
 };
 
 export type PromptProfilePromptContext = {
@@ -47,6 +54,11 @@ export type PromptProfilePromptContext = {
   prependSystemContext?: string;
   appendSystemContext?: string;
   streamParams?: AgentStreamParams;
+  toolPolicy?: {
+    allow?: string[];
+    deny?: string[];
+  };
+  preferredTools: string[];
   atDepthEntries: Array<{
     name: string;
     content: string;
@@ -67,6 +79,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map(parseString).filter(Boolean);
 }
 
 function parseBoolean(value: unknown, fallback: boolean): boolean {
@@ -198,6 +217,41 @@ function resolvePromptProfileStreamParams(document: RawPromptProfileDocument): A
   };
 }
 
+function resolvePromptProfileToolConfig(document: RawPromptProfileDocument): {
+  toolPolicy?: {
+    allow?: string[];
+    deny?: string[];
+  };
+  preferredTools: string[];
+} {
+  if (Array.isArray(document) || !isRecord(document)) {
+    return { preferredTools: [] };
+  }
+  const tools = isRecord(document.tools) ? document.tools : null;
+  if (!tools) {
+    return { preferredTools: [] };
+  }
+
+  const allow = normalizeToolList(parseStringArray(tools.allow));
+  const deny = normalizeToolList(parseStringArray(tools.deny));
+  const preferredTools = normalizeToolList(
+    parseStringArray(
+      tools.prefer ?? tools.preferred ?? tools.preferred_tools ?? tools.preferredTools,
+    ),
+  );
+
+  return {
+    toolPolicy:
+      allow.length > 0 || deny.length > 0
+        ? {
+            ...(allow.length > 0 ? { allow } : {}),
+            ...(deny.length > 0 ? { deny } : {}),
+          }
+        : undefined,
+    preferredTools,
+  };
+}
+
 function normalizeModuleName(rawName: unknown, sourcePath: string, index: number): string {
   const trimmed = parseString(rawName);
   if (trimmed) {
@@ -316,6 +370,7 @@ async function loadSelectedPromptProfile(params: {
     sourcePath,
     modules: normalizePromptProfileModules(parsed, sourcePath, params.warn),
     streamParams: resolvePromptProfileStreamParams(parsed),
+    ...resolvePromptProfileToolConfig(parsed),
   };
 }
 
@@ -349,14 +404,29 @@ function buildPromptProfileSection(params: {
   return joinPresentTextSegments(rendered);
 }
 
+function buildPromptProfileToolPreferencesSection(params: {
+  profileName: string;
+  preferredTools: string[];
+}): string | undefined {
+  if (params.preferredTools.length === 0) {
+    return undefined;
+  }
+
+  return [
+    `[Prompt Profile: ${params.profileName} / Tool Preferences]`,
+    `Prefer these tools or tool groups when relevant: ${params.preferredTools.join(", ")}`,
+  ].join("\n");
+}
+
 export async function resolvePromptProfilePromptContext(params: {
   workspaceDir: string;
   defaultPromptProfile?: string;
   warn?: (message: string) => void;
 }): Promise<PromptProfilePromptContext> {
   const loaded = await loadSelectedPromptProfile(params);
-  if (!loaded || loaded.modules.length === 0) {
+  if (!loaded) {
     return {
+      preferredTools: [],
       atDepthEntries: [],
       matchedModuleNames: [],
       moduleEntries: [],
@@ -380,6 +450,10 @@ export async function resolvePromptProfilePromptContext(params: {
         modules: loaded.modules,
         position: "tail_reminder",
       }),
+      buildPromptProfileToolPreferencesSection({
+        profileName: loaded.profileName,
+        preferredTools: loaded.preferredTools,
+      }),
     ].filter(Boolean),
   );
   const atDepthEntries = loaded.modules
@@ -400,6 +474,8 @@ export async function resolvePromptProfilePromptContext(params: {
     prependSystemContext,
     appendSystemContext,
     streamParams: loaded.streamParams,
+    toolPolicy: loaded.toolPolicy,
+    preferredTools: loaded.preferredTools,
     atDepthEntries,
     matchedModuleNames: loaded.modules.map((module) => module.name),
     moduleEntries: loaded.modules.map((module) => ({

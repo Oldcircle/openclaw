@@ -76,6 +76,11 @@ function makeParams(
                 temperature: 0.2,
                 maxTokens: 4096,
               },
+              toolPolicy: {
+                allow: ["group:web", "read"],
+                deny: ["memory_get"],
+              },
+              preferredTools: ["web_search", "group:web"],
               matchedModuleNames: ["Analysis frame", "Final answer", "Mid-history reminder"],
               moduleEntries: [
                 {
@@ -164,6 +169,10 @@ describe("buildContextReply", () => {
     );
     expect(result.text).toContain("Prompt Profile: Deep Think");
     expect(result.text).toContain("Prompt Profile stream params: temperature=0.2, maxTokens=4096");
+    expect(result.text).toContain(
+      "Prompt Profile tool scope: allow=group:web, read; deny=memory_get",
+    );
+    expect(result.text).toContain("Prompt Profile preferred tools: web_search, group:web");
     expect(result.text).toContain(
       "Active Prompt Profile modules: Analysis frame, Final answer, Mid-history reminder",
     );

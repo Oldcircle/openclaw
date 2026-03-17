@@ -57,6 +57,13 @@ export async function resolveCommandsSystemPromptBundle(
     cfg: params.cfg,
     sessionKey: params.ctx.SessionKey ?? params.sessionKey,
   });
+  const agentCardDefaults = await resolveAgentCardDefaults({
+    workspaceDir,
+  });
+  const promptProfileContext = await resolvePromptProfilePromptContext({
+    workspaceDir,
+    defaultPromptProfile: agentCardDefaults.defaultPromptProfile,
+  });
   const tools = (() => {
     try {
       return createOpenClawCodingTools({
@@ -72,6 +79,7 @@ export async function resolveCommandsSystemPromptBundle(
         senderIsOwner: params.command.senderIsOwner,
         modelProvider: params.provider,
         modelId: params.model,
+        promptProfileToolPolicy: promptProfileContext.toolPolicy,
       });
     } catch {
       return [];
@@ -115,13 +123,6 @@ export async function resolveCommandsSystemPromptBundle(
       }
     : { enabled: false };
   const ttsHint = params.cfg ? buildTtsSystemPromptHint(params.cfg) : undefined;
-  const agentCardDefaults = await resolveAgentCardDefaults({
-    workspaceDir,
-  });
-  const promptProfileContext = await resolvePromptProfilePromptContext({
-    workspaceDir,
-    defaultPromptProfile: agentCardDefaults.defaultPromptProfile,
-  });
 
   const baseSystemPrompt = buildAgentSystemPrompt({
     workspaceDir,

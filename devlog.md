@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-03-17
+
+### Prompt Profile：工具范围收缩 + 工具偏好
+
+- 修改 `src/agents/prompt-profiles.ts`
+  - 新增 `tools.allow` / `tools.deny` / `tools.prefer` 解析
+  - `tools.prefer` 会生成独立的 Prompt Profile Tool Preferences 区块注入 system context
+- 修改 `src/agents/pi-tools.ts`
+  - Prompt Profile tool scope 会接入既有 tool-policy pipeline，只做“缩小工具集”，不会绕过 operator / agent / sandbox 限制
+- 修改 `src/agents/pi-embedded-runner/run/attempt.ts`
+  - 运行前先解析 Agent Card / Prompt Profile，并在构建 tool list 时应用 Prompt Profile tool scope
+- 修改 `src/auto-reply/reply/commands-system-prompt.ts`
+  - `/context` 相关命令的 system prompt estimate 也会按 Prompt Profile tool scope 计算工具列表
+- 修改 `src/agents/system-prompt-report.ts`、`src/auto-reply/reply/commands-context-report.ts`
+  - `/context detail` 新增 Prompt Profile 的 tool scope / preferred tools 可观测性
+- 新增测试：
+  - `src/agents/pi-tools.prompt-profile-tool-policy.test.ts`
+  - `src/auto-reply/reply/commands-system-prompt.test.ts`
+
+### 验证
+
+- `pnpm exec vitest run src/agents/prompt-profiles.test.ts src/agents/system-prompt-report.test.ts src/agents/pi-tools.prompt-profile-tool-policy.test.ts src/auto-reply/reply/commands-context-report.test.ts src/auto-reply/reply/commands-system-prompt.test.ts`
+- `pnpm exec vitest run src/agents/pi-embedded-runner/run/attempt.test.ts src/agents/pi-tools-agent-config.test.ts`
+
 ## 2026-03-16
 
 ### trace-viewer：active trace live 暴露

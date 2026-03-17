@@ -132,6 +132,11 @@ describe("buildSystemPromptReport", () => {
           temperature: 0.2,
           maxTokens: 4096,
         },
+        toolPolicy: {
+          allow: ["group:web", "read"],
+          deny: ["memory_get"],
+        },
+        preferredTools: ["web_search", "group:web"],
         matchedModuleNames: ["Analysis frame", "Final answer"],
         moduleEntries: [
           { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },
@@ -157,6 +162,11 @@ describe("buildSystemPromptReport", () => {
         temperature: 0.2,
         maxTokens: 4096,
       },
+      toolPolicy: {
+        allow: ["group:web", "read"],
+        deny: ["memory_get"],
+      },
+      preferredTools: ["web_search", "group:web"],
       matchedModuleNames: ["Analysis frame", "Final answer"],
       moduleEntries: [
         { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },

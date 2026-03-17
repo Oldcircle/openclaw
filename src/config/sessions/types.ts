@@ -385,6 +385,11 @@ export type SessionSystemPromptReport = {
       temperature?: number;
       maxTokens?: number;
     };
+    toolPolicy?: {
+      allow?: string[];
+      deny?: string[];
+    };
+    preferredTools: string[];
     matchedModuleNames: string[];
     moduleEntries: Array<{
       name: string;

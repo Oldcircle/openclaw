@@ -155,6 +155,9 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const promptProfile = report.promptProfiles;
   const promptProfileMatchedModuleNames = promptProfile?.matchedModuleNames ?? [];
   const promptProfileAtDepthEntries = promptProfile?.atDepthEntries ?? [];
+  const promptProfileToolAllow = promptProfile?.toolPolicy?.allow ?? [];
+  const promptProfileToolDeny = promptProfile?.toolPolicy?.deny ?? [];
+  const promptProfilePreferredTools = promptProfile?.preferredTools ?? [];
   const contextBooksLine = contextBookProjectEntries.length
     ? `Context Books (Project Context): ${contextBookProjectEntries.length} entries / ${formatCharsAndTokens(report.contextBooks?.projectContextChars ?? 0)}`
     : "Context Books (Project Context): none";
@@ -186,6 +189,18 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
           .filter(Boolean)
           .join(", ")}`
       : undefined;
+  const promptProfileToolScopeLine =
+    promptProfileToolAllow.length > 0 || promptProfileToolDeny.length > 0
+      ? `Prompt Profile tool scope: ${[
+          promptProfileToolAllow.length > 0 ? `allow=${promptProfileToolAllow.join(", ")}` : "",
+          promptProfileToolDeny.length > 0 ? `deny=${promptProfileToolDeny.join(", ")}` : "",
+        ]
+          .filter(Boolean)
+          .join("; ")}`
+      : undefined;
+  const promptProfilePreferredToolsLine = promptProfilePreferredTools.length
+    ? `Prompt Profile preferred tools: ${formatNameList(promptProfilePreferredTools, 12)}`
+    : undefined;
   const promptProfileMatchedLine = promptProfileMatchedModuleNames.length
     ? `Active Prompt Profile modules: ${formatNameList(promptProfileMatchedModuleNames, 12)}`
     : report.source === "run" && promptProfile?.profileName
@@ -266,6 +281,8 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     "",
     promptProfileLine,
     ...(promptProfileStreamParamsLine ? [promptProfileStreamParamsLine] : []),
+    ...(promptProfileToolScopeLine ? [promptProfileToolScopeLine] : []),
+    ...(promptProfilePreferredToolsLine ? [promptProfilePreferredToolsLine] : []),
     ...(promptProfileMatchedLine ? [promptProfileMatchedLine] : []),
     ...(promptProfileAtDepthLine ? [promptProfileAtDepthLine] : []),
     "",

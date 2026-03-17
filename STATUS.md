@@ -12,14 +12,14 @@
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                 |
-| ---- | ---------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                     |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                 |
-| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                        |
-| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，工具偏好仍未实现 |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                 |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                              |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                   |
+| ---- | ---------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                                       |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                                   |
+| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                                          |
+| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，并已接通工具范围收缩与工具偏好提示 |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                   |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                |
 
 ## 当前待办
 
@@ -39,7 +39,8 @@
 - [x] P2: 扩展 `default_prompt_profile` 自动挂载
 - [x] P3: Prompt Profile 最小运行时骨架（workspace 级资产读取 + 默认挂载）
 - [x] P3: 扩展 Prompt Profile 默认模型参数（`temperature` / `max_tokens`）
-- [ ] P3: 扩展工具偏好等 profile 能力
+- [x] P3: 扩展工具偏好（tool scope + prefer）
+- [ ] P3: 扩展输出格式偏好等剩余 profile 能力
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
 - [ ] trace-viewer: 用真实 Gateway 再验证 running trace 的列表/详情刷新体验
@@ -55,7 +56,7 @@
 
 ## 最新进展（2026-03-17）
 
-### 3/17: 真实 Gateway 端到端验证 + bugfix
+### 3/17: 真实 Gateway 端到端验证 + Prompt Profile 工具偏好 + bugfix
 
 - **首次端到端验证**：从 fork 源码启动 Gateway，通过 Telegram 对话和 `/context detail` 验证 P1 + P2 功能
 - **P1 Context Book 验证通过**：
@@ -77,6 +78,9 @@
   - 已支持 `before_context` / `after_context` / `tail_reminder` / `at_depth` 注入，并通过现有 system context / at_depth 链路接入运行时
   - `/context detail` 已显示当前 Prompt Profile、启用模块和 at_depth 模块体积
   - 已支持 `temperature` / `max_tokens` 作为运行时默认 stream params；显式 run-level overrides 仍优先于 profile 默认值
+  - 已支持 `tools.allow` / `tools.deny` 缩小最终可用工具集，仍遵守现有 operator / agent / provider / sandbox policy 交集
+  - 已支持 `tools.prefer` 注入工具偏好提示，作为独立 Prompt Profile 区块进入 system context
+  - `/context detail` 与命令侧 prompt estimate 已显示 Prompt Profile 的 tool scope / preferred tools，并按该 scope 计算工具列表
 - **bugfix**: `loadAgentCardDocument` 在文件读取失败时返回 `[]` 而非 `null`，导致 Agent Card 静默失效（已修复并推送）
 - **P0 基线已记录**：通过 `/context detail` 获取了完整的 system prompt 结构基线
 
@@ -117,13 +121,15 @@
   - 新增 workspace 级 `Prompt Profile` 资产解析与运行时注入
   - 已支持 `before_context / after_context / tail_reminder / at_depth` 模块位置
   - 已支持读取 `temperature` / `max_tokens` 作为 profile 级默认模型参数
+  - 已支持 `tools.allow` / `tools.deny` / `tools.prefer`
 - `src/agents/pi-embedded-runner/run/attempt.ts`
   - `Agent Card.default_prompt_profile` 已接入运行期 Prompt Profile 默认挂载
   - Prompt Profile 默认模型参数会在运行期合并进 stream params，且显式 run-level overrides 优先
+  - Prompt Profile tool scope 会在建 tool list 前接入现有 tool-policy pipeline
 - `src/agents/system-prompt-report.ts`
-  - `systemPromptReport` 已新增 `promptProfiles` 区块，记录 profile 名称、模块体积、默认 stream params 和 at_depth 模块
+  - `systemPromptReport` 已新增 `promptProfiles` 区块，记录 profile 名称、模块体积、默认 stream params、tool scope / preferred tools 和 at_depth 模块
 - `src/auto-reply/reply/commands-context-report.ts`
-  - `/context list` 与 `/context detail` 已显示 Prompt Profile 摘要、默认 stream params、模块列表与 at_depth 模块
+  - `/context list` 与 `/context detail` 已显示 Prompt Profile 摘要、默认 stream params、tool scope / preferred tools、模块列表与 at_depth 模块
 - `src/agents/system-prompt.ts`
   - `Project Context` 中对 `SOUL.md` 的 persona 提示已兼容 synthetic `agent-card.*#SOUL.md` 路径
 - 本地验证补充通过：
@@ -131,6 +137,7 @@
   - `pnpm exec vitest run src/agents/agent-card.test.ts src/agents/pi-embedded-runner/run/attempt.test.ts`
   - `pnpm exec vitest run src/agents/agent-card.test.ts src/agents/context-books.test.ts src/agents/bootstrap-files.test.ts src/agents/pi-embedded-runner/run/attempt.test.ts`
   - `pnpm exec vitest run src/agents/prompt-profiles.test.ts src/agents/system-prompt-report.test.ts src/auto-reply/reply/commands-context-report.test.ts`
+  - `pnpm exec vitest run src/agents/pi-tools.prompt-profile-tool-policy.test.ts src/auto-reply/reply/commands-system-prompt.test.ts`
 
 - `extensions/trace-viewer/src/collector.ts`
   - `list()` 现在会把 active trace 和已落盘 trace 合并返回
