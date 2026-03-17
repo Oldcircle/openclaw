@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { makeTempWorkspace } from "../test-helpers/workspace.js";
 import {
   DEFAULT_PROMPT_PROFILES_DIRNAME,
+  mergePromptProfileStreamParams,
   resolvePromptProfilePromptContext,
 } from "./prompt-profiles.js";
 
@@ -16,6 +17,8 @@ describe("resolvePromptProfilePromptContext", () => {
       path.join(promptProfilesDir, "deep-think.yaml"),
       [
         'name: "Deep Think"',
+        "temperature: 0.2",
+        "max_tokens: 4096",
         "modules:",
         "  - name: Analysis frame",
         "    enabled: true",
@@ -44,6 +47,10 @@ describe("resolvePromptProfilePromptContext", () => {
     });
 
     expect(result.profileName).toBe("Deep Think");
+    expect(result.streamParams).toEqual({
+      temperature: 0.2,
+      maxTokens: 4096,
+    });
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Analysis frame]");
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Final answer]");
     expect(result.matchedModuleNames).toEqual([
@@ -73,5 +80,24 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.matchedModuleNames).toEqual([]);
     expect(result.moduleEntries).toEqual([]);
     expect(warnings[0]).toContain('default prompt profile "deep-think"');
+  });
+});
+
+describe("mergePromptProfileStreamParams", () => {
+  it("uses Prompt Profile stream params as defaults and lets explicit stream params win", () => {
+    expect(
+      mergePromptProfileStreamParams({
+        promptProfileStreamParams: {
+          temperature: 0.2,
+          maxTokens: 4096,
+        },
+        streamParams: {
+          temperature: 0.7,
+        },
+      }),
+    ).toEqual({
+      temperature: 0.7,
+      maxTokens: 4096,
+    });
   });
 });

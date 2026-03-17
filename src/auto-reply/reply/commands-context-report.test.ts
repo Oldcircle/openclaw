@@ -72,6 +72,10 @@ function makeParams(
               profileName: "Deep Think",
               sourcePath: "/tmp/workspace/prompt-profiles/deep-think.yaml",
               promptChars: 150,
+              streamParams: {
+                temperature: 0.2,
+                maxTokens: 4096,
+              },
               matchedModuleNames: ["Analysis frame", "Final answer", "Mid-history reminder"],
               moduleEntries: [
                 {
@@ -159,6 +163,7 @@ describe("buildContextReply", () => {
       }),
     );
     expect(result.text).toContain("Prompt Profile: Deep Think");
+    expect(result.text).toContain("Prompt Profile stream params: temperature=0.2, maxTokens=4096");
     expect(result.text).toContain(
       "Active Prompt Profile modules: Analysis frame, Final answer, Mid-history reminder",
     );

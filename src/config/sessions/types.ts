@@ -381,6 +381,10 @@ export type SessionSystemPromptReport = {
     profileName?: string;
     sourcePath?: string;
     promptChars: number;
+    streamParams?: {
+      temperature?: number;
+      maxTokens?: number;
+    };
     matchedModuleNames: string[];
     moduleEntries: Array<{
       name: string;

@@ -73,7 +73,10 @@ import { createPreparedEmbeddedPiSettingsManager } from "../../pi-project-settin
 import { applyPiAutoCompactionGuard } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
 import { createOpenClawCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
-import { resolvePromptProfilePromptContext } from "../../prompt-profiles.js";
+import {
+  mergePromptProfileStreamParams,
+  resolvePromptProfilePromptContext,
+} from "../../prompt-profiles.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { isXaiProvider } from "../../schema/clean-for-xai.js";
@@ -2012,10 +2015,16 @@ export async function runEmbeddedAttempt(
         params.config,
         params.provider,
         params.modelId,
-        {
-          ...params.streamParams,
-          fastMode: params.fastMode,
-        },
+        (() => {
+          const mergedStreamParams = mergePromptProfileStreamParams({
+            promptProfileStreamParams: systemPromptReport.promptProfiles?.streamParams,
+            streamParams: params.streamParams,
+          });
+          return {
+            ...mergedStreamParams,
+            fastMode: params.fastMode,
+          };
+        })(),
         params.thinkLevel,
         sessionAgentId,
       );
@@ -2466,6 +2475,7 @@ export async function runEmbeddedAttempt(
               (sum, entry) => sum + entry.chars,
               0,
             ),
+            streamParams: promptProfilePromptContext.streamParams,
             matchedModuleNames: promptProfilePromptContext.matchedModuleNames,
             moduleEntries: promptProfilePromptContext.moduleEntries,
             atDepthEntries: promptProfilePromptContext.atDepthEntries.map((entry) => ({

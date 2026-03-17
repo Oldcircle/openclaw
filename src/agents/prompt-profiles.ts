@@ -3,6 +3,7 @@ import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import type { AgentStreamParams } from "../commands/agent/types.js";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { joinPresentTextSegments } from "../shared/text/join-segments.js";
 import { resolveUserPath } from "../utils.js";
@@ -17,6 +18,9 @@ type PromptProfilePosition = "before_context" | "after_context" | "tail_reminder
 type RawPromptProfileDocument =
   | {
       name?: unknown;
+      temperature?: unknown;
+      max_tokens?: unknown;
+      maxTokens?: unknown;
       modules?: unknown;
     }
   | unknown[];
@@ -34,6 +38,7 @@ type LoadedPromptProfile = {
   profileName: string;
   sourcePath: string;
   modules: NormalizedPromptProfileModule[];
+  streamParams: AgentStreamParams;
 };
 
 export type PromptProfilePromptContext = {
@@ -41,6 +46,7 @@ export type PromptProfilePromptContext = {
   sourcePath?: string;
   prependSystemContext?: string;
   appendSystemContext?: string;
+  streamParams?: AgentStreamParams;
   atDepthEntries: Array<{
     name: string;
     content: string;
@@ -73,6 +79,16 @@ function parseOrder(value: unknown): number {
 
 function parseDepth(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function parseTemperature(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function parseMaxTokens(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined;
 }
 
 function parsePosition(value: unknown): PromptProfilePosition {
@@ -167,6 +183,19 @@ function resolvePromptProfileName(document: RawPromptProfileDocument, sourcePath
     }
   }
   return path.basename(sourcePath, path.extname(sourcePath));
+}
+
+function resolvePromptProfileStreamParams(document: RawPromptProfileDocument): AgentStreamParams {
+  if (Array.isArray(document) || !isRecord(document)) {
+    return {};
+  }
+
+  const temperature = parseTemperature(document.temperature);
+  const maxTokens = parseMaxTokens(document.max_tokens ?? document.maxTokens);
+  return {
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(maxTokens === undefined ? {} : { maxTokens }),
+  };
 }
 
 function normalizeModuleName(rawName: unknown, sourcePath: string, index: number): string {
@@ -286,6 +315,7 @@ async function loadSelectedPromptProfile(params: {
     profileName: resolvePromptProfileName(parsed, sourcePath),
     sourcePath,
     modules: normalizePromptProfileModules(parsed, sourcePath, params.warn),
+    streamParams: resolvePromptProfileStreamParams(parsed),
   };
 }
 
@@ -369,6 +399,7 @@ export async function resolvePromptProfilePromptContext(params: {
     sourcePath: loaded.sourcePath,
     prependSystemContext,
     appendSystemContext,
+    streamParams: loaded.streamParams,
     atDepthEntries,
     matchedModuleNames: loaded.modules.map((module) => module.name),
     moduleEntries: loaded.modules.map((module) => ({
@@ -382,4 +413,15 @@ export async function resolvePromptProfilePromptContext(params: {
       }).length,
     })),
   };
+}
+
+export function mergePromptProfileStreamParams(params: {
+  promptProfileStreamParams?: AgentStreamParams;
+  streamParams?: AgentStreamParams;
+}): AgentStreamParams | undefined {
+  const merged = {
+    ...params.promptProfileStreamParams,
+    ...params.streamParams,
+  };
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }

@@ -128,6 +128,10 @@ describe("buildSystemPromptReport", () => {
       promptProfileContext: {
         profileName: "Deep Think",
         sourcePath: "/tmp/workspace/prompt-profiles/deep-think.yaml",
+        streamParams: {
+          temperature: 0.2,
+          maxTokens: 4096,
+        },
         matchedModuleNames: ["Analysis frame", "Final answer"],
         moduleEntries: [
           { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },
@@ -149,6 +153,10 @@ describe("buildSystemPromptReport", () => {
       profileName: "Deep Think",
       sourcePath: "/tmp/workspace/prompt-profiles/deep-think.yaml",
       promptChars: 100,
+      streamParams: {
+        temperature: 0.2,
+        maxTokens: 4096,
+      },
       matchedModuleNames: ["Analysis frame", "Final answer"],
       moduleEntries: [
         { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },

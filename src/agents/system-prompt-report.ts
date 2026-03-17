@@ -175,6 +175,7 @@ export function buildSystemPromptReport(params: {
               (sum, entry) => sum + entry.chars,
               0,
             ),
+            streamParams: params.promptProfileContext.streamParams,
             matchedModuleNames: params.promptProfileContext.matchedModuleNames,
             moduleEntries: params.promptProfileContext.moduleEntries,
             atDepthEntries: params.promptProfileContext.atDepthEntries.map((entry) => ({

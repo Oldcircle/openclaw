@@ -171,6 +171,21 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const promptProfileLine = promptProfile?.profileName
     ? `Prompt Profile: ${promptProfile.profileName} / ${formatCharsAndTokens(promptProfile.promptChars)}`
     : "Prompt Profile: none";
+  const promptProfileStreamParamsLine =
+    promptProfile?.streamParams &&
+    (typeof promptProfile.streamParams.temperature === "number" ||
+      typeof promptProfile.streamParams.maxTokens === "number")
+      ? `Prompt Profile stream params: ${[
+          typeof promptProfile.streamParams.temperature === "number"
+            ? `temperature=${promptProfile.streamParams.temperature}`
+            : "",
+          typeof promptProfile.streamParams.maxTokens === "number"
+            ? `maxTokens=${promptProfile.streamParams.maxTokens}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(", ")}`
+      : undefined;
   const promptProfileMatchedLine = promptProfileMatchedModuleNames.length
     ? `Active Prompt Profile modules: ${formatNameList(promptProfileMatchedModuleNames, 12)}`
     : report.source === "run" && promptProfile?.profileName
@@ -250,6 +265,7 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ...(contextBookAtDepthLine ? [contextBookAtDepthLine] : []),
     "",
     promptProfileLine,
+    ...(promptProfileStreamParamsLine ? [promptProfileStreamParamsLine] : []),
     ...(promptProfileMatchedLine ? [promptProfileMatchedLine] : []),
     ...(promptProfileAtDepthLine ? [promptProfileAtDepthLine] : []),
     "",
