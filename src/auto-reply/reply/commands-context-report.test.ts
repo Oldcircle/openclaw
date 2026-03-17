@@ -85,6 +85,7 @@ function makeParams(
                 format: "markdown",
                 sections: ["Summary", "Risks"],
                 style: ["concise"],
+                requireFinalTag: true,
                 rules: ["End with a recommendation."],
               },
               matchedModuleNames: ["Analysis frame", "Final answer", "Mid-history reminder"],
@@ -183,6 +184,7 @@ describe("buildContextReply", () => {
     expect(result.text).toContain("Prompt Profile output sections: Summary, Risks");
     expect(result.text).toContain("Prompt Profile output style: concise");
     expect(result.text).toContain("Prompt Profile output rules: End with a recommendation.");
+    expect(result.text).toContain("Prompt Profile output final tag: required");
     expect(result.text).toContain(
       "Active Prompt Profile modules: Analysis frame, Final answer, Mid-history reminder",
     );

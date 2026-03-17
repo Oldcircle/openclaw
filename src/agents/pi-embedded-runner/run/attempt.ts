@@ -1334,6 +1334,13 @@ export function resolveAttemptFsWorkspaceOnly(params: {
   });
 }
 
+export function resolveAttemptEnforceFinalTag(params: {
+  enforceFinalTag?: boolean;
+  promptProfileRequireFinalTag?: boolean;
+}): boolean {
+  return params.enforceFinalTag === true || params.promptProfileRequireFinalTag === true;
+}
+
 export function prependSystemPromptAddition(params: {
   systemPrompt: string;
   systemPromptAddition?: string;
@@ -2285,6 +2292,11 @@ export async function runEmbeddedAttempt(
         });
       };
 
+      const effectiveEnforceFinalTag = resolveAttemptEnforceFinalTag({
+        enforceFinalTag: params.enforceFinalTag,
+        promptProfileRequireFinalTag:
+          promptProfilePromptContext.outputPreferences?.requireFinalTag === true,
+      });
       let currentPromptForHook = params.prompt;
       const subscription = subscribeEmbeddedPiSession({
         session: activeSession,
@@ -2305,7 +2317,7 @@ export async function runEmbeddedAttempt(
         onPartialReply: params.onPartialReply,
         onAssistantMessageStart: params.onAssistantMessageStart,
         onAgentEvent: params.onAgentEvent,
-        enforceFinalTag: params.enforceFinalTag,
+        enforceFinalTag: effectiveEnforceFinalTag,
         config: params.config,
         sessionKey: sandboxSessionKey,
         sessionId: params.sessionId,

@@ -12,14 +12,14 @@
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                               |
-| ---- | ---------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                                                   |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                                               |
-| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                                                      |
-| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，并已接通工具范围收缩、工具偏好和结构化输出偏好 |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                               |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                            |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                                                     |
+| ---- | ---------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                                                                         |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                                                                     |
+| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                                                                            |
+| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，并已接通工具范围收缩、工具偏好、结构化输出偏好和 `require_final_tag` |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                                                     |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                                                  |
 
 ## 当前待办
 
@@ -41,7 +41,7 @@
 - [x] P3: 扩展 Prompt Profile 默认模型参数（`temperature` / `max_tokens`）
 - [x] P3: 扩展工具偏好（tool scope + prefer）
 - [x] P3: 扩展结构化输出格式偏好（output.format / sections / style / rules）
-- [ ] P3: 扩展 reply tags / 更细粒度格式控制等剩余 profile 能力
+- [ ] P3: 扩展 reply tags / 更细粒度格式控制等剩余 profile 能力（`require_final_tag` 已接通）
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
 - [ ] trace-viewer: 用真实 Gateway 再验证 running trace 的列表/详情刷新体验
@@ -57,7 +57,7 @@
 
 ## 最新进展（2026-03-17）
 
-### 3/17: 真实 Gateway 端到端验证 + Prompt Profile 工具偏好 / 输出偏好 + bugfix
+### 3/17: 真实 Gateway 端到端验证 + Prompt Profile 工具偏好 / 输出偏好 / final-tag + bugfix
 
 - **首次端到端验证**：从 fork 源码启动 Gateway，通过 Telegram 对话和 `/context detail` 验证 P1 + P2 功能
 - **P1 Context Book 验证通过**：
@@ -82,6 +82,7 @@
   - 已支持 `tools.allow` / `tools.deny` 缩小最终可用工具集，仍遵守现有 operator / agent / provider / sandbox policy 交集
   - 已支持 `tools.prefer` 注入工具偏好提示，作为独立 Prompt Profile 区块进入 system context
   - 已支持 `output.format` / `output.sections` / `output.style` / `output.rules`，作为结构化 Output Preferences 区块注入 system context
+  - 已支持 `output.require_final_tag`，会复用现有 `<final>...</final>` 严格模式并真实影响输出裁剪
   - `/context detail` 与命令侧 prompt estimate 已显示 Prompt Profile 的 tool scope / preferred tools / output preferences，并按该 scope 计算工具列表
 - **bugfix**: `loadAgentCardDocument` 在文件读取失败时返回 `[]` 而非 `null`，导致 Agent Card 静默失效（已修复并推送）
 - **P0 基线已记录**：通过 `/context detail` 获取了完整的 system prompt 结构基线

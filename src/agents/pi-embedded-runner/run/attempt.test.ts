@@ -14,6 +14,7 @@ import {
   stripAtDepthContextBookMessages,
   shouldInjectOllamaCompatNumCtx,
   decodeHtmlEntitiesInObject,
+  resolveAttemptEnforceFinalTag,
   wrapOllamaCompatNumCtx,
   wrapStreamFnRepairMalformedToolCallArguments,
   wrapStreamFnTrimToolCallNames,
@@ -228,6 +229,35 @@ describe("resolveAttemptFsWorkspaceOnly", () => {
       resolveAttemptFsWorkspaceOnly({
         config: cfg,
         sessionAgentId: "main",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("resolveAttemptEnforceFinalTag", () => {
+  it("keeps explicit run-level enforceFinalTag enabled", () => {
+    expect(
+      resolveAttemptEnforceFinalTag({
+        enforceFinalTag: true,
+        promptProfileRequireFinalTag: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("enables final-tag enforcement when the Prompt Profile requires it", () => {
+    expect(
+      resolveAttemptEnforceFinalTag({
+        enforceFinalTag: false,
+        promptProfileRequireFinalTag: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("stays disabled when neither source requires final tags", () => {
+    expect(
+      resolveAttemptEnforceFinalTag({
+        enforceFinalTag: false,
+        promptProfileRequireFinalTag: false,
       }),
     ).toBe(false);
   });

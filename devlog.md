@@ -11,12 +11,15 @@
 - 修改 `src/agents/prompt-profiles.ts`
   - 新增 `output.format` / `output.sections` / `output.style` / `output.rules` 解析
   - 结构化输出偏好会生成独立的 Prompt Profile Output Preferences 区块注入 system context
+- 修改 `src/agents/pi-embedded-runner/run/attempt.ts`
+  - 新增 `output.require_final_tag` 到运行时合并逻辑，可直接驱动现有 `<final>...</final>` 严格模式
 - 修改 `src/agents/system-prompt-report.ts`、`src/auto-reply/reply/commands-context-report.ts`
   - `/context detail` 新增 Prompt Profile output preferences 可观测性
 - 补充测试：
   - `src/agents/prompt-profiles.test.ts`
   - `src/agents/system-prompt-report.test.ts`
   - `src/auto-reply/reply/commands-context-report.test.ts`
+  - `src/agents/pi-embedded-runner/run/attempt.test.ts`
 
 ### 验证
 

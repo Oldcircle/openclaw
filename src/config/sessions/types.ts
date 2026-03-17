@@ -395,6 +395,7 @@ export type SessionSystemPromptReport = {
       sections: string[];
       style: string[];
       rules: string[];
+      requireFinalTag?: boolean;
     };
     matchedModuleNames: string[];
     moduleEntries: Array<{

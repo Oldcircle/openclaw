@@ -36,6 +36,7 @@ describe("resolvePromptProfilePromptContext", () => {
         "  style:",
         "    - concise",
         "    - comparison-first",
+        "  require_final_tag: true",
         "  rules:",
         "    - Include a recommendation at the end.",
         "    - Call out blockers explicitly.",
@@ -80,6 +81,7 @@ describe("resolvePromptProfilePromptContext", () => {
       format: "markdown",
       sections: ["Summary", "Risks"],
       style: ["concise", "comparison-first"],
+      requireFinalTag: true,
       rules: ["Include a recommendation at the end.", "Call out blockers explicitly."],
     });
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Analysis frame]");
@@ -94,6 +96,9 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.appendSystemContext).toContain("Preferred output format: markdown");
     expect(result.appendSystemContext).toContain("Preferred sections: Summary, Risks");
     expect(result.appendSystemContext).toContain("Preferred style: concise, comparison-first");
+    expect(result.appendSystemContext).toContain(
+      "Wrap the final user-visible answer in <final>...</final>.",
+    );
     expect(result.appendSystemContext).toContain("- Include a recommendation at the end.");
     expect(result.matchedModuleNames).toEqual([
       "Analysis frame",
@@ -164,6 +169,7 @@ describe("resolvePromptProfilePromptContext", () => {
         'name: "Formatting"',
         "output:",
         "  format: json",
+        "  require_final_tag: true",
         "  sections:",
         "    - answer",
         "  rules:",
@@ -182,12 +188,16 @@ describe("resolvePromptProfilePromptContext", () => {
       format: "json",
       sections: ["answer"],
       style: [],
+      requireFinalTag: true,
       rules: ["Return valid JSON only."],
     });
     expect(result.appendSystemContext).toContain(
       "[Prompt Profile: Formatting / Output Preferences]",
     );
     expect(result.appendSystemContext).toContain("Preferred output format: json");
+    expect(result.appendSystemContext).toContain(
+      "Wrap the final user-visible answer in <final>...</final>.",
+    );
   });
 });
 

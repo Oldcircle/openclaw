@@ -51,6 +51,7 @@ type LoadedPromptProfile = {
     sections: string[];
     style: string[];
     rules: string[];
+    requireFinalTag?: boolean;
   };
 };
 
@@ -70,6 +71,7 @@ export type PromptProfilePromptContext = {
     sections: string[];
     style: string[];
     rules: string[];
+    requireFinalTag?: boolean;
   };
   atDepthEntries: Array<{
     name: string;
@@ -270,6 +272,7 @@ function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocumen
     sections: string[];
     style: string[];
     rules: string[];
+    requireFinalTag?: boolean;
   };
 } {
   if (Array.isArray(document) || !isRecord(document)) {
@@ -284,8 +287,15 @@ function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocumen
   const sections = parseStringArray(output.sections);
   const style = parseStringArray(output.style);
   const rules = parseStringArray(output.rules);
+  const requireFinalTag = parseBoolean(output.require_final_tag ?? output.requireFinalTag, false);
 
-  if (!format && sections.length === 0 && style.length === 0 && rules.length === 0) {
+  if (
+    !format &&
+    sections.length === 0 &&
+    style.length === 0 &&
+    rules.length === 0 &&
+    !requireFinalTag
+  ) {
     return {};
   }
 
@@ -295,6 +305,7 @@ function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocumen
       sections,
       style,
       rules,
+      ...(requireFinalTag ? { requireFinalTag: true } : {}),
     },
   };
 }
@@ -473,6 +484,7 @@ function buildPromptProfileOutputPreferencesSection(params: {
     sections: string[];
     style: string[];
     rules: string[];
+    requireFinalTag?: boolean;
   };
 }): string | undefined {
   const preferences = params.outputPreferences;
@@ -485,6 +497,7 @@ function buildPromptProfileOutputPreferencesSection(params: {
     preferences.format ? `Preferred output format: ${preferences.format}` : "",
     preferences.sections.length > 0 ? `Preferred sections: ${preferences.sections.join(", ")}` : "",
     preferences.style.length > 0 ? `Preferred style: ${preferences.style.join(", ")}` : "",
+    preferences.requireFinalTag ? "Wrap the final user-visible answer in <final>...</final>." : "",
     preferences.rules.length > 0
       ? ["Output rules:", ...preferences.rules.map((rule) => `- ${rule}`)].join("\n")
       : "",
