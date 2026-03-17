@@ -643,7 +643,6 @@ export async function loadContextBookBootstrapFiles(params: {
     workspaceDir: params.workspaceDir,
     warn: params.warn,
   });
-
   const matchedEntries = applyContextBookGroups({
     entries: entries.filter(
       (entry) =>

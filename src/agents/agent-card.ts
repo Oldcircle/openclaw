@@ -223,7 +223,7 @@ async function loadAgentCardDocument(params: {
       warn: params.warn,
     });
     if (!raw) {
-      return [];
+      return null;
     }
     const parsed = parseAgentCardDocument(raw, filePath);
     if (!parsed) {
