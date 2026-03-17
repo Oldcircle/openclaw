@@ -4,22 +4,22 @@
 
 ## 当前进度
 
-| 方向              | 状态   | 说明                                                                                             |
-| ----------------- | ------ | ------------------------------------------------------------------------------------------------ |
-| trace-viewer 插件 | 进行中 | blob store + collector + API 已落地，3/16 已补 active trace live list/get                        |
-| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                                               |
-| 资产化提示词系统  | 进行中 | P0-P2 已完成，P3 Prompt Profile 接近完成（模块/参数/工具/输出/final-tag/reply-tags/profile-use） |
+| 方向              | 状态   | 说明                                                                |
+| ----------------- | ------ | ------------------------------------------------------------------- |
+| trace-viewer 插件 | 已完成 | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过 |
+| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                  |
+| 资产化提示词系统  | 进行中 | P0-P3 已完成，P4/P5 待后续按需推进                                  |
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                                                                                            |
-| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                                                                                                                |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                                                                                                            |
-| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                                                                                                                   |
-| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，并已接通工具范围收缩、工具偏好、结构化输出偏好、`require_final_tag`、`reply_tags` 和 `openclaw profile use` |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                                                                                            |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                                                                                         |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                          |
+| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                              |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）          |
+| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通 |
+| P3   | Prompt Profile 基础版  | 已完成 | 模块注入 + 模型参数 + 工具范围/偏好 + 输出偏好 + final-tag + reply-tags + `openclaw profile use` CLI                          |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                          |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                       |
 
 ## 当前待办
 
@@ -42,10 +42,10 @@
 - [x] P3: 扩展工具偏好（tool scope + prefer）
 - [x] P3: 扩展结构化输出格式偏好（output.format / sections / style / rules）
 - [x] P3: 扩展 reply tags 控制（`off` / `current_only` / `allow_explicit`）
-- [ ] P3: 更细粒度格式控制等剩余 profile 能力
+- [x] P3: `openclaw profile use` CLI 切换命令（3/17 完成并手动验证通过）
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
-- [ ] trace-viewer: 用真实 Gateway 再验证 running trace 的列表/详情刷新体验
+- [x] trace-viewer: 用真实 Gateway 验证 API 端点（health/list/detail/date-filter/status-filter 均通过，3/17）
 
 ## 已知问题
 
