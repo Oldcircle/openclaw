@@ -12,14 +12,14 @@
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                    |
-| ---- | ---------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                        |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                    |
-| P2   | Agent Card 基础版      | 进行中 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；3/17 已补 `default_context_book` 默认挂载，`default_prompt_profile` 仍待实现 |
-| P3   | Prompt Profile 基础版  | 未开始 | preset-lite，不开放硬权限提升                                                                                                           |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                    |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                 |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                          |
+| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                              |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）          |
+| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通 |
+| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；模型参数/工具偏好仍未实现           |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                          |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                       |
 
 ## 当前待办
 
@@ -36,8 +36,9 @@
 - [x] P2: Agent Card 最小兼容骨架（workspace 级 persona 资产优先，旧文件兜底）
 - [x] P2: 扩展 `depth_prompt`
 - [x] P2: 扩展 `default_context_book` 默认挂载
-- [ ] P2: 扩展 `default_prompt_profile` 自动挂载
-- [ ] P3: 待 P2 稳定后进入实现
+- [x] P2: 扩展 `default_prompt_profile` 自动挂载
+- [x] P3: Prompt Profile 最小运行时骨架（workspace 级资产读取 + 默认挂载）
+- [ ] P3: 扩展模型参数 / 工具偏好等 profile 能力
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
 - [ ] trace-viewer: 用真实 Gateway 再验证 running trace 的列表/详情刷新体验
@@ -68,6 +69,12 @@
   - `default_context_book` 已接入真实默认挂载链路：bootstrap 常驻注入与运行期关键词注入都会优先只加载 Agent Card 指定的 Context Book
   - 支持按文件名或去扩展名的资产名匹配 `context-books/*.yaml|yml|json`
   - 若 Agent Card 指定的默认 Context Book 不存在，会在日志中告警并回退到现有“加载全部 Context Book”的兼容行为
+- **P3 Prompt Profile 最小可用版已落地**：
+  - 新增 workspace 级 `prompt-profiles/*.yaml|yml|json` 资产读取
+  - `Agent Card.default_prompt_profile` 已驱动真实默认挂载
+  - 已支持最小模块 schema：`enabled` / `content` / `position` / `depth` / `order`
+  - 已支持 `before_context` / `after_context` / `tail_reminder` / `at_depth` 注入，并通过现有 system context / at_depth 链路接入运行时
+  - `/context detail` 已显示当前 Prompt Profile、启用模块和 at_depth 模块体积
 - **bugfix**: `loadAgentCardDocument` 在文件读取失败时返回 `[]` 而非 `null`，导致 Agent Card 静默失效（已修复并推送）
 - **P0 基线已记录**：通过 `/context detail` 获取了完整的 system prompt 结构基线
 
@@ -104,12 +111,22 @@
 - `src/agents/pi-embedded-runner/run/attempt.ts`
   - `Agent Card depth_prompt` 已接入运行期，与 `Context Book at_depth` 共用同一条历史注入链路
   - 运行期关键词触发 Context Book 注入已受 `Agent Card.default_context_book` 控制
+- `src/agents/prompt-profiles.ts`
+  - 新增 workspace 级 `Prompt Profile` 资产解析与运行时注入
+  - 已支持 `before_context / after_context / tail_reminder / at_depth` 模块位置
+- `src/agents/pi-embedded-runner/run/attempt.ts`
+  - `Agent Card.default_prompt_profile` 已接入运行期 Prompt Profile 默认挂载
+- `src/agents/system-prompt-report.ts`
+  - `systemPromptReport` 已新增 `promptProfiles` 区块，记录 profile 名称、模块体积和 at_depth 模块
+- `src/auto-reply/reply/commands-context-report.ts`
+  - `/context list` 与 `/context detail` 已显示 Prompt Profile 摘要、模块列表与 at_depth 模块
 - `src/agents/system-prompt.ts`
   - `Project Context` 中对 `SOUL.md` 的 persona 提示已兼容 synthetic `agent-card.*#SOUL.md` 路径
 - 本地验证补充通过：
   - `pnpm exec vitest run src/agents/bootstrap-files.test.ts src/agents/system-prompt.test.ts`
   - `pnpm exec vitest run src/agents/agent-card.test.ts src/agents/pi-embedded-runner/run/attempt.test.ts`
   - `pnpm exec vitest run src/agents/agent-card.test.ts src/agents/context-books.test.ts src/agents/bootstrap-files.test.ts src/agents/pi-embedded-runner/run/attempt.test.ts`
+  - `pnpm exec vitest run src/agents/prompt-profiles.test.ts src/agents/system-prompt-report.test.ts src/auto-reply/reply/commands-context-report.test.ts`
 
 - `extensions/trace-viewer/src/collector.ts`
   - `list()` 现在会把 active trace 和已落盘 trace 合并返回

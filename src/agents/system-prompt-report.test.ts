@@ -117,6 +117,47 @@ describe("buildSystemPromptReport", () => {
     ]);
   });
 
+  it("includes Prompt Profile module stats when provided", () => {
+    const report = buildSystemPromptReport({
+      source: "run",
+      generatedAt: 0,
+      bootstrapMaxChars: 20_000,
+      systemPrompt: "system",
+      bootstrapFiles: [],
+      injectedFiles: [],
+      promptProfileContext: {
+        profileName: "Deep Think",
+        sourcePath: "/tmp/workspace/prompt-profiles/deep-think.yaml",
+        matchedModuleNames: ["Analysis frame", "Final answer"],
+        moduleEntries: [
+          { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },
+          { name: "Final answer", position: "tail_reminder", depth: 0, chars: 60 },
+        ],
+        atDepthEntries: [
+          {
+            name: "Deep Think / Mid-history reminder",
+            content: "content",
+            depth: 2,
+          },
+        ],
+      },
+      skillsPrompt: "",
+      tools: [],
+    });
+
+    expect(report.promptProfiles).toEqual({
+      profileName: "Deep Think",
+      sourcePath: "/tmp/workspace/prompt-profiles/deep-think.yaml",
+      promptChars: 100,
+      matchedModuleNames: ["Analysis frame", "Final answer"],
+      moduleEntries: [
+        { name: "Analysis frame", position: "after_context", depth: 0, chars: 40 },
+        { name: "Final answer", position: "tail_reminder", depth: 0, chars: 60 },
+      ],
+      atDepthEntries: [{ name: "Deep Think / Mid-history reminder", depth: 2, chars: 7 }],
+    });
+  });
+
   it("reports injectedChars=0 when injected file does not match by path or basename", () => {
     const file = makeBootstrapFile({ path: "/tmp/workspace/policies/AGENTS.md" });
     const report = makeReport({

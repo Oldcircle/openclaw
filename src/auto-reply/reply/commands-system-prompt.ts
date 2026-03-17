@@ -1,9 +1,14 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { resolveAgentCardDefaults } from "../../agents/agent-card.js";
 import { resolveSessionAgentIds } from "../../agents/agent-scope.js";
 import { resolveBootstrapContextForRun } from "../../agents/bootstrap-files.js";
 import { resolveDefaultModelForAgent } from "../../agents/model-selection.js";
 import type { EmbeddedContextFile } from "../../agents/pi-embedded-helpers.js";
 import { createOpenClawCodingTools } from "../../agents/pi-tools.js";
+import {
+  resolvePromptProfilePromptContext,
+  type PromptProfilePromptContext,
+} from "../../agents/prompt-profiles.js";
 import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import { buildWorkspaceSkillSnapshot } from "../../agents/skills.js";
 import { getSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
@@ -12,6 +17,7 @@ import { buildAgentSystemPrompt } from "../../agents/system-prompt.js";
 import { buildToolSummaryMap } from "../../agents/tool-summaries.js";
 import type { WorkspaceBootstrapFile } from "../../agents/workspace.js";
 import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
+import { joinPresentTextSegments } from "../../shared/text/join-segments.js";
 import { buildTtsSystemPromptHint } from "../../tts/tts.js";
 import type { HandleCommandsParams } from "./commands-types.js";
 
@@ -21,6 +27,7 @@ export type CommandsSystemPromptBundle = {
   skillsPrompt: string;
   bootstrapFiles: WorkspaceBootstrapFile[];
   injectedFiles: EmbeddedContextFile[];
+  promptProfileContext: PromptProfilePromptContext;
   sandboxRuntime: ReturnType<typeof resolveSandboxRuntimeStatus>;
 };
 
@@ -108,8 +115,15 @@ export async function resolveCommandsSystemPromptBundle(
       }
     : { enabled: false };
   const ttsHint = params.cfg ? buildTtsSystemPromptHint(params.cfg) : undefined;
+  const agentCardDefaults = await resolveAgentCardDefaults({
+    workspaceDir,
+  });
+  const promptProfileContext = await resolvePromptProfilePromptContext({
+    workspaceDir,
+    defaultPromptProfile: agentCardDefaults.defaultPromptProfile,
+  });
 
-  const systemPrompt = buildAgentSystemPrompt({
+  const baseSystemPrompt = buildAgentSystemPrompt({
     workspaceDir,
     defaultThinkLevel: params.resolvedThinkLevel,
     reasoningLevel: params.resolvedReasoningLevel,
@@ -131,6 +145,23 @@ export async function resolveCommandsSystemPromptBundle(
     sandboxInfo,
     memoryCitationsMode: params.cfg?.memory?.citations,
   });
+  const systemPrompt =
+    joinPresentTextSegments(
+      [
+        promptProfileContext.prependSystemContext,
+        baseSystemPrompt,
+        promptProfileContext.appendSystemContext,
+      ],
+      { trim: true },
+    ) || baseSystemPrompt;
 
-  return { systemPrompt, tools, skillsPrompt, bootstrapFiles, injectedFiles, sandboxRuntime };
+  return {
+    systemPrompt,
+    tools,
+    skillsPrompt,
+    bootstrapFiles,
+    injectedFiles,
+    promptProfileContext,
+    sandboxRuntime,
+  };
 }

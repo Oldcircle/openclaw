@@ -315,3 +315,14 @@ export async function resolveAgentCardPromptContext(params: {
     ),
   };
 }
+
+export async function resolveAgentCardDefaults(params: {
+  workspaceDir: string;
+  warn?: (message: string) => void;
+}): Promise<AgentCardDefaults> {
+  const loaded = await loadAgentCardDocument(params);
+  if (!loaded) {
+    return {};
+  }
+  return extractAgentCardDefaults(loaded.card);
+}

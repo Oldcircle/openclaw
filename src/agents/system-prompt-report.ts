@@ -3,6 +3,7 @@ import type { SessionSystemPromptReport } from "../config/sessions/types.js";
 import { buildBootstrapInjectionStats } from "./bootstrap-budget.js";
 import { CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX } from "./context-books.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
+import type { PromptProfilePromptContext } from "./prompt-profiles.js";
 import type { WorkspaceBootstrapFile } from "./workspace.js";
 
 function extractBetween(
@@ -121,6 +122,7 @@ export function buildSystemPromptReport(params: {
   injectedFiles: EmbeddedContextFile[];
   contextBookMatchedEntryNames?: string[];
   contextBookAtDepthEntries?: Array<{ name: string; depth: number; chars: number }>;
+  promptProfileContext?: PromptProfilePromptContext;
   skillsPrompt: string;
   tools: AgentTool[];
 }): SessionSystemPromptReport {
@@ -164,6 +166,25 @@ export function buildSystemPromptReport(params: {
       matchedEntryNames: params.contextBookMatchedEntryNames,
       atDepthEntries: params.contextBookAtDepthEntries,
     }),
+    ...(params.promptProfileContext?.profileName
+      ? {
+          promptProfiles: {
+            profileName: params.promptProfileContext.profileName,
+            sourcePath: params.promptProfileContext.sourcePath,
+            promptChars: params.promptProfileContext.moduleEntries.reduce(
+              (sum, entry) => sum + entry.chars,
+              0,
+            ),
+            matchedModuleNames: params.promptProfileContext.matchedModuleNames,
+            moduleEntries: params.promptProfileContext.moduleEntries,
+            atDepthEntries: params.promptProfileContext.atDepthEntries.map((entry) => ({
+              name: entry.name,
+              depth: entry.depth,
+              chars: entry.content.length,
+            })),
+          },
+        }
+      : {}),
     skills: {
       promptChars: params.skillsPrompt.length,
       entries: skillsEntries,

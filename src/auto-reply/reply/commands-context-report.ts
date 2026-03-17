@@ -52,8 +52,15 @@ async function resolveContextReport(
 
   const bootstrapMaxChars = resolveBootstrapMaxChars(params.cfg);
   const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.cfg);
-  const { systemPrompt, tools, skillsPrompt, bootstrapFiles, injectedFiles, sandboxRuntime } =
-    await resolveCommandsSystemPromptBundle(params);
+  const {
+    systemPrompt,
+    tools,
+    skillsPrompt,
+    bootstrapFiles,
+    injectedFiles,
+    promptProfileContext,
+    sandboxRuntime,
+  } = await resolveCommandsSystemPromptBundle(params);
 
   return buildSystemPromptReport({
     source: "estimate",
@@ -69,6 +76,7 @@ async function resolveContextReport(
     systemPrompt,
     bootstrapFiles,
     injectedFiles,
+    promptProfileContext,
     skillsPrompt,
     tools,
   });
@@ -144,6 +152,9 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const contextBookProjectEntries = report.contextBooks?.projectContextEntries ?? [];
   const contextBookMatchedEntryNames = report.contextBooks?.matchedEntryNames ?? [];
   const contextBookAtDepthEntries = report.contextBooks?.atDepthEntries ?? [];
+  const promptProfile = report.promptProfiles;
+  const promptProfileMatchedModuleNames = promptProfile?.matchedModuleNames ?? [];
+  const promptProfileAtDepthEntries = promptProfile?.atDepthEntries ?? [];
   const contextBooksLine = contextBookProjectEntries.length
     ? `Context Books (Project Context): ${contextBookProjectEntries.length} entries / ${formatCharsAndTokens(report.contextBooks?.projectContextChars ?? 0)}`
     : "Context Books (Project Context): none";
@@ -156,6 +167,19 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ? `Last run at_depth entries: ${contextBookAtDepthEntries.map((entry) => `${entry.name} (depth=${entry.depth})`).join(", ")}`
     : report.source === "run" && contextBookMatchedEntryNames.length > 0
       ? "Last run at_depth entries: none"
+      : undefined;
+  const promptProfileLine = promptProfile?.profileName
+    ? `Prompt Profile: ${promptProfile.profileName} / ${formatCharsAndTokens(promptProfile.promptChars)}`
+    : "Prompt Profile: none";
+  const promptProfileMatchedLine = promptProfileMatchedModuleNames.length
+    ? `Active Prompt Profile modules: ${formatNameList(promptProfileMatchedModuleNames, 12)}`
+    : report.source === "run" && promptProfile?.profileName
+      ? "Active Prompt Profile modules: none"
+      : undefined;
+  const promptProfileAtDepthLine = promptProfileAtDepthEntries.length
+    ? `Prompt Profile at_depth modules: ${promptProfileAtDepthEntries.map((entry) => `${entry.name} (depth=${entry.depth})`).join(", ")}`
+    : report.source === "run" && promptProfileMatchedModuleNames.length > 0
+      ? "Prompt Profile at_depth modules: none"
       : undefined;
   const workspaceLabel = report.workspaceDir ?? params.workspaceDir;
   const bootstrapMaxChars =
@@ -225,6 +249,10 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ...(contextBookMatchedLine ? [contextBookMatchedLine] : []),
     ...(contextBookAtDepthLine ? [contextBookAtDepthLine] : []),
     "",
+    promptProfileLine,
+    ...(promptProfileMatchedLine ? [promptProfileMatchedLine] : []),
+    ...(promptProfileAtDepthLine ? [promptProfileAtDepthLine] : []),
+    "",
     skillsLine,
     skillsNamesLine,
   ];
@@ -246,12 +274,22 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
       contextBookProjectEntries.map((entry) => ({ name: entry.name, value: entry.injectedChars })),
       30,
     );
+    const perPromptProfileModule = formatListTop(
+      (promptProfile?.moduleEntries ?? []).map((entry) => ({
+        name: `${entry.name} (${entry.position})`,
+        value: entry.chars,
+      })),
+      30,
+    );
     const toolPropsLines = report.tools.entries
       .filter((t) => t.propertiesCount != null)
       .toSorted((a, b) => (b.propertiesCount ?? 0) - (a.propertiesCount ?? 0))
       .slice(0, 30)
       .map((t) => `- ${t.name}: ${t.propertiesCount} params`);
     const contextBookAtDepthLines = contextBookAtDepthEntries.map(
+      (entry) => `- ${entry.name}: depth=${entry.depth} | ${formatCharsAndTokens(entry.chars)}`,
+    );
+    const promptProfileAtDepthLines = promptProfileAtDepthEntries.map(
       (entry) => `- ${entry.name}: depth=${entry.depth} | ${formatCharsAndTokens(entry.chars)}`,
     );
 
@@ -265,6 +303,15 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
         ...(perContextBook.omitted ? [`… (+${perContextBook.omitted} more Context Books)`] : []),
         ...(contextBookAtDepthLines.length
           ? ["", "Last run at_depth Context Books:", ...contextBookAtDepthLines]
+          : []),
+        ...(perPromptProfileModule.lines.length
+          ? ["", "Prompt Profile modules:", ...perPromptProfileModule.lines]
+          : []),
+        ...(perPromptProfileModule.omitted
+          ? [`… (+${perPromptProfileModule.omitted} more Prompt Profile modules)`]
+          : []),
+        ...(promptProfileAtDepthLines.length
+          ? ["", "Prompt Profile at_depth modules:", ...promptProfileAtDepthLines]
           : []),
         "",
         ...(perSkill.lines.length ? ["Top skills (prompt entry size):", ...perSkill.lines] : []),

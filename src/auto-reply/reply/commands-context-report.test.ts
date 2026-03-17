@@ -5,7 +5,11 @@ import type { HandleCommandsParams } from "./commands-types.js";
 function makeParams(
   commandBodyNormalized: string,
   truncated: boolean,
-  options?: { omitBootstrapLimits?: boolean; includeContextBooks?: boolean },
+  options?: {
+    omitBootstrapLimits?: boolean;
+    includeContextBooks?: boolean;
+    includePromptProfile?: boolean;
+  },
 ): HandleCommandsParams {
   return {
     command: {
@@ -63,6 +67,35 @@ function makeParams(
               atDepthEntries: [{ name: "Tail reminder", depth: 2, chars: 55 }],
             }
           : undefined,
+        promptProfiles: options?.includePromptProfile
+          ? {
+              profileName: "Deep Think",
+              sourcePath: "/tmp/workspace/prompt-profiles/deep-think.yaml",
+              promptChars: 150,
+              matchedModuleNames: ["Analysis frame", "Final answer", "Mid-history reminder"],
+              moduleEntries: [
+                {
+                  name: "Analysis frame",
+                  position: "after_context",
+                  depth: 0,
+                  chars: 50,
+                },
+                {
+                  name: "Final answer",
+                  position: "tail_reminder",
+                  depth: 0,
+                  chars: 60,
+                },
+                {
+                  name: "Mid-history reminder",
+                  position: "at_depth",
+                  depth: 2,
+                  chars: 40,
+                },
+              ],
+              atDepthEntries: [{ name: "Deep Think / Mid-history reminder", depth: 2, chars: 40 }],
+            }
+          : undefined,
         skills: {
           promptChars: 10,
           entries: [{ name: "checks", blockChars: 10 }],
@@ -117,5 +150,20 @@ describe("buildContextReply", () => {
     expect(result.text).toContain("Top Context Books (Project Context):");
     expect(result.text).toContain("Last run at_depth Context Books:");
     expect(result.text).toContain("Tail reminder: depth=2");
+  });
+
+  it("shows Prompt Profile summaries in detail output when present", async () => {
+    const result = await buildContextReply(
+      makeParams("/context detail", false, {
+        includePromptProfile: true,
+      }),
+    );
+    expect(result.text).toContain("Prompt Profile: Deep Think");
+    expect(result.text).toContain(
+      "Active Prompt Profile modules: Analysis frame, Final answer, Mid-history reminder",
+    );
+    expect(result.text).toContain("Prompt Profile modules:");
+    expect(result.text).toContain("Prompt Profile at_depth modules:");
+    expect(result.text).toContain("Deep Think / Mid-history reminder: depth=2");
   });
 });

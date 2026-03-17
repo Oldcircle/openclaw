@@ -377,6 +377,23 @@ export type SessionSystemPromptReport = {
       chars: number;
     }>;
   };
+  promptProfiles?: {
+    profileName?: string;
+    sourcePath?: string;
+    promptChars: number;
+    matchedModuleNames: string[];
+    moduleEntries: Array<{
+      name: string;
+      position: string;
+      depth: number;
+      chars: number;
+    }>;
+    atDepthEntries: Array<{
+      name: string;
+      depth: number;
+      chars: number;
+    }>;
+  };
   skills: {
     promptChars: number;
     entries: Array<{ name: string; blockChars: number }>;

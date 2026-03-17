@@ -73,6 +73,7 @@ import { createPreparedEmbeddedPiSettingsManager } from "../../pi-project-settin
 import { applyPiAutoCompactionGuard } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
 import { createOpenClawCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
+import { resolvePromptProfilePromptContext } from "../../prompt-profiles.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { isXaiProvider } from "../../schema/clean-for-xai.js";
@@ -2424,9 +2425,15 @@ export async function runEmbeddedAttempt(
           messages: activeSession.messages,
           warn: (message) => log.warn(`context-books: ${message}`),
         });
+        const promptProfilePromptContext = await resolvePromptProfilePromptContext({
+          workspaceDir: params.workspaceDir,
+          defaultPromptProfile: agentCardPromptContext.defaultPromptProfile,
+          warn: (message) => log.warn(`prompt-profiles: ${message}`),
+        });
         const atDepthEntries = [
           ...agentCardPromptContext.atDepthEntries,
           ...contextBookPromptContext.atDepthEntries,
+          ...promptProfilePromptContext.atDepthEntries,
         ];
         const hasAtDepthEntries = atDepthEntries.length > 0;
         const hookResultRaw = await resolvePromptBuildHookResult({
@@ -2451,15 +2458,34 @@ export async function runEmbeddedAttempt(
             chars: entry.content.length,
           })),
         };
+        if (promptProfilePromptContext.profileName) {
+          systemPromptReport.promptProfiles = {
+            profileName: promptProfilePromptContext.profileName,
+            sourcePath: promptProfilePromptContext.sourcePath,
+            promptChars: promptProfilePromptContext.moduleEntries.reduce(
+              (sum, entry) => sum + entry.chars,
+              0,
+            ),
+            matchedModuleNames: promptProfilePromptContext.matchedModuleNames,
+            moduleEntries: promptProfilePromptContext.moduleEntries,
+            atDepthEntries: promptProfilePromptContext.atDepthEntries.map((entry) => ({
+              name: entry.name,
+              depth: entry.depth,
+              chars: entry.content.length,
+            })),
+          };
+        }
         const hookResult = {
           ...hookResultRaw,
           prependSystemContext: joinPresentTextSegments([
             contextBookPromptContext.prependSystemContext,
+            promptProfilePromptContext.prependSystemContext,
             hookResultRaw?.prependSystemContext,
           ]),
           appendSystemContext: joinPresentTextSegments([
             hookResultRaw?.appendSystemContext,
             contextBookPromptContext.appendSystemContext,
+            promptProfilePromptContext.appendSystemContext,
           ]),
         };
         {
