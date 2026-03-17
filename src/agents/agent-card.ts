@@ -36,6 +36,12 @@ type LoadedAgentCard = {
   card: RawAgentCard;
 };
 
+export type AgentCardDefaultPromptProfileUpdate = {
+  sourcePath: string;
+  created: boolean;
+  defaultPromptProfile: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -94,6 +100,15 @@ function parseAgentCardDocument(raw: string, sourcePath: string): RawAgentCard |
   } catch {
     return null;
   }
+}
+
+function formatAgentCardDocument(card: RawAgentCard, sourcePath: string): string {
+  const extension = path.extname(sourcePath).toLowerCase();
+  if (extension === ".json") {
+    return `${JSON.stringify(card, null, 2)}\n`;
+  }
+  const rendered = YAML.stringify(card);
+  return rendered.endsWith("\n") ? rendered : `${rendered}\n`;
 }
 
 function buildSyntheticSection(params: {
@@ -256,6 +271,52 @@ async function loadAgentCardDocument(params: {
     };
   }
   return null;
+}
+
+export async function setAgentCardDefaultPromptProfile(params: {
+  workspaceDir: string;
+  defaultPromptProfile: string;
+}): Promise<AgentCardDefaultPromptProfileUpdate> {
+  const workspaceDir = resolveUserPath(params.workspaceDir);
+  const defaultPromptProfile = params.defaultPromptProfile.trim();
+  if (!defaultPromptProfile) {
+    throw new Error("Prompt profile name cannot be empty.");
+  }
+
+  let sourcePath = path.join(workspaceDir, AGENT_CARD_FILENAMES[0]);
+  let created = true;
+  let card: RawAgentCard = {};
+
+  for (const fileName of AGENT_CARD_FILENAMES) {
+    const candidatePath = path.join(workspaceDir, fileName);
+    try {
+      await fs.access(candidatePath);
+    } catch {
+      continue;
+    }
+
+    created = false;
+    sourcePath = candidatePath;
+    const raw = await fs.readFile(candidatePath, "utf8");
+    const parsed = parseAgentCardDocument(raw, candidatePath);
+    if (!parsed) {
+      throw new Error(`Invalid agent card: ${candidatePath}`);
+    }
+    card = parsed;
+    break;
+  }
+
+  const nextCard: RawAgentCard = {
+    ...card,
+    default_prompt_profile: defaultPromptProfile,
+  };
+  await fs.writeFile(sourcePath, formatAgentCardDocument(nextCard, sourcePath), "utf8");
+
+  return {
+    sourcePath,
+    created,
+    defaultPromptProfile,
+  };
 }
 
 export async function loadAgentCardBootstrapFiles(params: {

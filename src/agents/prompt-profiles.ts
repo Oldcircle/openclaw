@@ -57,6 +57,12 @@ type LoadedPromptProfile = {
   };
 };
 
+export type ResolvedPromptProfileSelection = {
+  profileName: string;
+  sourcePath: string;
+  selectedPromptProfile: string;
+};
+
 export type PromptProfilePromptContext = {
   profileName?: string;
   sourcePath?: string;
@@ -620,6 +626,27 @@ export async function resolvePromptProfilePromptContext(params: {
         content: module.content,
       }).length,
     })),
+  };
+}
+
+export async function resolvePromptProfileSelection(params: {
+  workspaceDir: string;
+  selectedPromptProfile: string;
+  warn?: (message: string) => void;
+}): Promise<ResolvedPromptProfileSelection | null> {
+  const loaded = await loadSelectedPromptProfile({
+    workspaceDir: params.workspaceDir,
+    defaultPromptProfile: params.selectedPromptProfile,
+    warn: params.warn,
+  });
+  if (!loaded) {
+    return null;
+  }
+
+  return {
+    profileName: loaded.profileName,
+    sourcePath: loaded.sourcePath,
+    selectedPromptProfile: path.basename(loaded.sourcePath, path.extname(loaded.sourcePath)),
   };
 }
 

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeTempWorkspace } from "../test-helpers/workspace.js";
-import { resolveAgentCardPromptContext } from "./agent-card.js";
+import { resolveAgentCardPromptContext, setAgentCardDefaultPromptProfile } from "./agent-card.js";
 
 describe("resolveAgentCardPromptContext", () => {
   it("builds at-depth prompt entries from Agent Card depth_prompt", async () => {
@@ -48,5 +48,39 @@ describe("resolveAgentCardPromptContext", () => {
     expect(warnings).toEqual([
       `skipping agent card ${path.join(workspaceDir, "agent-card.yaml")} - invalid YAML/JSON document`,
     ]);
+  });
+
+  it("updates the existing yaml agent card with default_prompt_profile", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-agent-card-");
+    await fs.writeFile(
+      path.join(workspaceDir, "agent-card.yaml"),
+      ['name: "Researcher"', 'default_context_book: "coding-knowledge"'].join("\n"),
+      "utf8",
+    );
+
+    const result = await setAgentCardDefaultPromptProfile({
+      workspaceDir,
+      defaultPromptProfile: "deep-think",
+    });
+
+    expect(result.created).toBe(false);
+    await expect(
+      fs.readFile(path.join(workspaceDir, "agent-card.yaml"), "utf8"),
+    ).resolves.toContain("default_prompt_profile: deep-think");
+  });
+
+  it("creates agent-card.yaml when setting default_prompt_profile into an empty workspace", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-agent-card-");
+
+    const result = await setAgentCardDefaultPromptProfile({
+      workspaceDir,
+      defaultPromptProfile: "deep-think",
+    });
+
+    expect(result.created).toBe(true);
+    expect(result.sourcePath).toBe(path.join(workspaceDir, "agent-card.yaml"));
+    await expect(fs.readFile(result.sourcePath, "utf8")).resolves.toContain(
+      "default_prompt_profile: deep-think",
+    );
   });
 });

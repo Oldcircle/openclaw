@@ -97,6 +97,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "profile",
+    description: "Manage workspace Prompt Profile defaults",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../profile-cli.js");
+      mod.registerProfileCli(program);
+    },
+  },
+  {
     name: "approvals",
     description: "Manage exec approvals (gateway or node host)",
     hasSubcommands: true,

@@ -429,9 +429,10 @@ OpenClaw 的 P3 只需实现子集：
 - 输出偏好：`output.format` / `output.sections` / `output.style` / `output.rules`
 - 运行时行为：`output.require_final_tag`（接通 `<final>` 严格模式）
 - reply tags：`output.reply_tags`（`off` / `current_only` / `allow_explicit`，并已接通运行时解析）
+- CLI 切换：`openclaw profile use <name>`（写回 workspace `agent-card` 默认 profile）
 - 可观测性：`/context detail` 显示 profile 名称、模块、参数、工具范围、输出偏好
 - 3/17 通过真实 Gateway + Telegram 端到端验证
-- 待补：CLI `openclaw profile use` 切换命令，以及更细粒度格式控制
+- 待补：更细粒度格式控制
 
 ---
 
