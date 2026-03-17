@@ -195,7 +195,9 @@ export function handleMessageUpdate(
       emitReasoningEnd(ctx);
     }
     const parsedDelta = visibleDelta ? ctx.consumePartialReplyDirectives(visibleDelta) : null;
-    const parsedFull = parseReplyDirectives(stripTrailingDirective(next));
+    const parsedFull = parseReplyDirectives(stripTrailingDirective(next), {
+      replyTagsMode: ctx.params.replyTagsMode,
+    });
     const cleanedText = parsedFull.text;
     const mediaUrls = parsedDelta?.mediaUrls;
     const hasMedia = Boolean(mediaUrls && mediaUrls.length > 0);
@@ -291,7 +293,11 @@ export function handleMessageEnd(
       : "";
   const formattedReasoning = rawThinking ? formatReasoningMessage(rawThinking) : "";
   const trimmedText = text.trim();
-  const parsedText = trimmedText ? parseReplyDirectives(stripTrailingDirective(trimmedText)) : null;
+  const parsedText = trimmedText
+    ? parseReplyDirectives(stripTrailingDirective(trimmedText), {
+        replyTagsMode: ctx.params.replyTagsMode,
+      })
+    : null;
   let cleanedText = parsedText?.text ?? "";
   let mediaUrls = parsedText?.mediaUrls;
   let hasMedia = Boolean(mediaUrls && mediaUrls.length > 0);
@@ -301,7 +307,9 @@ export function handleMessageEnd(
     const rawStrippedFinal = rawTrimmed.replace(/<\s*\/?\s*final\s*>/gi, "").trim();
     const rawCandidate = rawStrippedFinal || rawTrimmed;
     if (rawCandidate) {
-      const parsedFallback = parseReplyDirectives(stripTrailingDirective(rawCandidate));
+      const parsedFallback = parseReplyDirectives(stripTrailingDirective(rawCandidate), {
+        replyTagsMode: ctx.params.replyTagsMode,
+      });
       cleanedText = parsedFallback.text ?? rawCandidate;
       mediaUrls = parsedFallback.mediaUrls;
       hasMedia = Boolean(mediaUrls && mediaUrls.length > 0);
@@ -338,11 +346,14 @@ export function handleMessageEnd(
     if (!onBlockReply) {
       return;
     }
-    void Promise.resolve()
-      .then(() => onBlockReply(payload))
-      .catch((err) => {
+    try {
+      const result = onBlockReply(payload);
+      void Promise.resolve(result).catch((err) => {
         ctx.log.warn(`block reply callback failed: ${String(err)}`);
       });
+    } catch (err) {
+      ctx.log.warn(`block reply callback failed: ${String(err)}`);
+    }
   };
   const shouldEmitReasoning = Boolean(
     ctx.state.includeReasoning &&

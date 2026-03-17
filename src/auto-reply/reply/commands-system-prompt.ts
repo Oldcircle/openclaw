@@ -140,6 +140,7 @@ export async function resolveCommandsSystemPromptBundle(
     contextFiles: injectedFiles,
     skillsPrompt,
     heartbeatPrompt: undefined,
+    replyTagsMode: promptProfileContext.outputPreferences?.replyTags,
     ttsHint,
     acpEnabled: params.cfg?.acp?.enabled !== false,
     runtimeInfo,

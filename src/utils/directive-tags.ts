@@ -8,10 +8,13 @@ export type InlineDirectiveParseResult = {
   hasReplyTag: boolean;
 };
 
+export type ReplyTagsMode = "off" | "current_only" | "allow_explicit";
+
 type InlineDirectiveParseOptions = {
   currentMessageId?: string;
   stripAudioTag?: boolean;
   stripReplyTags?: boolean;
+  replyTagsMode?: ReplyTagsMode;
 };
 
 const AUDIO_TAG_RE = /\[\[\s*audio_as_voice\s*\]\]/gi;
@@ -86,7 +89,12 @@ export function parseInlineDirectives(
   text?: string,
   options: InlineDirectiveParseOptions = {},
 ): InlineDirectiveParseResult {
-  const { currentMessageId, stripAudioTag = true, stripReplyTags = true } = options;
+  const {
+    currentMessageId,
+    stripAudioTag = true,
+    stripReplyTags = true,
+    replyTagsMode = "allow_explicit",
+  } = options;
   if (!text) {
     return {
       text: "",
@@ -120,13 +128,19 @@ export function parseInlineDirectives(
   });
 
   cleaned = cleaned.replace(REPLY_TAG_RE, (match, idRaw: string | undefined) => {
-    hasReplyTag = true;
-    if (idRaw === undefined) {
-      sawCurrent = true;
-    } else {
-      const id = idRaw.trim();
-      if (id) {
-        lastExplicitId = id;
+    const isCurrentTag = idRaw === undefined;
+    const allowTag =
+      replyTagsMode === "allow_explicit" || (replyTagsMode === "current_only" && isCurrentTag);
+
+    if (allowTag) {
+      hasReplyTag = true;
+      if (isCurrentTag) {
+        sawCurrent = true;
+      } else {
+        const id = idRaw.trim();
+        if (id) {
+          lastExplicitId = id;
+        }
       }
     }
     return stripReplyTags ? " " : match;

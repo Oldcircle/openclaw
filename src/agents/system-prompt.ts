@@ -2,6 +2,7 @@ import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
+import type { ReplyTagsMode } from "../utils/directive-tags.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
@@ -101,9 +102,27 @@ function buildTimeSection(params: { userTimezone?: string }) {
   return ["## Current Date & Time", `Time zone: ${params.userTimezone}`, ""];
 }
 
-function buildReplyTagsSection(isMinimal: boolean) {
-  if (isMinimal) {
+function buildReplyTagsSection(params: { isMinimal: boolean; replyTagsMode?: ReplyTagsMode }) {
+  if (params.isMinimal) {
     return [];
+  }
+  if (params.replyTagsMode === "off") {
+    return [
+      "## Reply Tags",
+      "Do not include reply tags such as [[reply_to_current]] or [[reply_to:<id>]] in replies unless the user explicitly asks for raw tags.",
+      "",
+    ];
+  }
+  if (params.replyTagsMode === "current_only") {
+    return [
+      "## Reply Tags",
+      "To request a native reply/quote on supported surfaces, include one tag in your reply:",
+      "- Reply tags must be the very first token in the message (no leading text/newlines): [[reply_to_current]] your reply.",
+      "- Use only [[reply_to_current]]. Do not use [[reply_to:<id>]] in this session.",
+      "Whitespace inside the tag is allowed (e.g. [[ reply_to_current ]]).",
+      "Tags are stripped before sending; support depends on the current channel config.",
+      "",
+    ];
   }
   return [
     "## Reply Tags",
@@ -207,6 +226,7 @@ export function buildAgentSystemPrompt(params: {
   heartbeatPrompt?: string;
   docsPath?: string;
   workspaceNotes?: string[];
+  replyTagsMode?: ReplyTagsMode;
   ttsHint?: string;
   /** Controls which hardcoded sections to include. Defaults to "full". */
   promptMode?: PromptMode;
@@ -568,7 +588,10 @@ export function buildAgentSystemPrompt(params: {
     "## Workspace Files (injected)",
     "These user-editable files are loaded by OpenClaw and included below in Project Context.",
     "",
-    ...buildReplyTagsSection(isMinimal),
+    ...buildReplyTagsSection({
+      isMinimal,
+      replyTagsMode: params.replyTagsMode,
+    }),
     ...buildMessagingSection({
       isMinimal,
       availableTools,

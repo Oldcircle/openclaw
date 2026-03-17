@@ -7,6 +7,7 @@ import type { AgentStreamParams } from "../commands/agent/types.js";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { joinPresentTextSegments } from "../shared/text/join-segments.js";
 import { resolveUserPath } from "../utils.js";
+import type { ReplyTagsMode } from "../utils/directive-tags.js";
 import { normalizeToolList } from "./tool-policy.js";
 
 export const DEFAULT_PROMPT_PROFILES_DIRNAME = "prompt-profiles";
@@ -52,6 +53,7 @@ type LoadedPromptProfile = {
     style: string[];
     rules: string[];
     requireFinalTag?: boolean;
+    replyTags?: ReplyTagsMode;
   };
 };
 
@@ -72,6 +74,7 @@ export type PromptProfilePromptContext = {
     style: string[];
     rules: string[];
     requireFinalTag?: boolean;
+    replyTags?: ReplyTagsMode;
   };
   atDepthEntries: Array<{
     name: string;
@@ -104,6 +107,27 @@ function parseStringArray(value: unknown): string[] {
 
 function parseBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function parseReplyTagsMode(value: unknown): ReplyTagsMode | undefined {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "off" || normalized === "disabled" || normalized === "none") {
+    return "off";
+  }
+  if (normalized === "current" || normalized === "current_only" || normalized === "current-only") {
+    return "current_only";
+  }
+  if (
+    normalized === "allow_explicit" ||
+    normalized === "allow-explicit" ||
+    normalized === "explicit"
+  ) {
+    return "allow_explicit";
+  }
+  return undefined;
 }
 
 function parseOrder(value: unknown): number {
@@ -273,6 +297,7 @@ function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocumen
     style: string[];
     rules: string[];
     requireFinalTag?: boolean;
+    replyTags?: ReplyTagsMode;
   };
 } {
   if (Array.isArray(document) || !isRecord(document)) {
@@ -288,13 +313,15 @@ function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocumen
   const style = parseStringArray(output.style);
   const rules = parseStringArray(output.rules);
   const requireFinalTag = parseBoolean(output.require_final_tag ?? output.requireFinalTag, false);
+  const replyTags = parseReplyTagsMode(output.reply_tags ?? output.replyTags);
 
   if (
     !format &&
     sections.length === 0 &&
     style.length === 0 &&
     rules.length === 0 &&
-    !requireFinalTag
+    !requireFinalTag &&
+    !replyTags
   ) {
     return {};
   }
@@ -306,6 +333,7 @@ function resolvePromptProfileOutputPreferences(document: RawPromptProfileDocumen
       style,
       rules,
       ...(requireFinalTag ? { requireFinalTag: true } : {}),
+      ...(replyTags ? { replyTags } : {}),
     },
   };
 }
@@ -485,6 +513,7 @@ function buildPromptProfileOutputPreferencesSection(params: {
     style: string[];
     rules: string[];
     requireFinalTag?: boolean;
+    replyTags?: ReplyTagsMode;
   };
 }): string | undefined {
   const preferences = params.outputPreferences;
@@ -492,12 +521,22 @@ function buildPromptProfileOutputPreferencesSection(params: {
     return undefined;
   }
 
+  const replyTagsLabel =
+    preferences.replyTags === "off"
+      ? "disabled"
+      : preferences.replyTags === "current_only"
+        ? "current-only"
+        : preferences.replyTags === "allow_explicit"
+          ? "allow explicit ids when provided"
+          : "";
+
   const lines = [
     `[Prompt Profile: ${params.profileName} / Output Preferences]`,
     preferences.format ? `Preferred output format: ${preferences.format}` : "",
     preferences.sections.length > 0 ? `Preferred sections: ${preferences.sections.join(", ")}` : "",
     preferences.style.length > 0 ? `Preferred style: ${preferences.style.join(", ")}` : "",
     preferences.requireFinalTag ? "Wrap the final user-visible answer in <final>...</final>." : "",
+    replyTagsLabel ? `Reply tag policy: ${replyTagsLabel}` : "",
     preferences.rules.length > 0
       ? ["Output rules:", ...preferences.rules.map((rule) => `- ${rule}`)].join("\n")
       : "",

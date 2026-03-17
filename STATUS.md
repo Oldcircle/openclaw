@@ -4,22 +4,22 @@
 
 ## 当前进度
 
-| 方向              | 状态   | 说明                                                                      |
-| ----------------- | ------ | ------------------------------------------------------------------------- |
-| trace-viewer 插件 | 进行中 | blob store + collector + API 已落地，3/16 已补 active trace live list/get |
-| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                        |
-| 资产化提示词系统  | 进行中 | P0-P2 已完成，P3 Prompt Profile 接近完成（模块/参数/工具/输出/final-tag） |
+| 方向              | 状态   | 说明                                                                                 |
+| ----------------- | ------ | ------------------------------------------------------------------------------------ |
+| trace-viewer 插件 | 进行中 | blob store + collector + API 已落地，3/16 已补 active trace live list/get            |
+| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                                   |
+| 资产化提示词系统  | 进行中 | P0-P2 已完成，P3 Prompt Profile 接近完成（模块/参数/工具/输出/final-tag/reply-tags） |
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                                                     |
-| ---- | ---------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                                                                         |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                                                                     |
-| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                                                                            |
-| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，并已接通工具范围收缩、工具偏好、结构化输出偏好和 `require_final_tag` |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                                                     |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                                                  |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                                                                                                                    |
+| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                                                                                                        |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                                                                                                    |
+| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通                                                                                           |
+| P3   | Prompt Profile 基础版  | 进行中 | preset-lite 最小可用版已落地：workspace 级资产读取 + 模块注入 + `/context detail` 可观测；已补 `temperature` / `max_tokens` 默认值，并已接通工具范围收缩、工具偏好、结构化输出偏好、`require_final_tag` 和 `reply_tags` |
+| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                                                                                                                    |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                                                                                                 |
 
 ## 当前待办
 
@@ -41,7 +41,8 @@
 - [x] P3: 扩展 Prompt Profile 默认模型参数（`temperature` / `max_tokens`）
 - [x] P3: 扩展工具偏好（tool scope + prefer）
 - [x] P3: 扩展结构化输出格式偏好（output.format / sections / style / rules）
-- [ ] P3: 扩展 reply tags / 更细粒度格式控制等剩余 profile 能力（`require_final_tag` 已接通）
+- [x] P3: 扩展 reply tags 控制（`off` / `current_only` / `allow_explicit`）
+- [ ] P3: 更细粒度格式控制 / `openclaw profile use` 等剩余 profile 能力
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
 - [ ] trace-viewer: 用真实 Gateway 再验证 running trace 的列表/详情刷新体验
@@ -56,6 +57,18 @@
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
 ## 最新进展（2026-03-17）
+
+### 3/17: Prompt Profile `reply_tags` 接通到 system prompt / 运行时解析 / `/context detail`
+
+- **P3 继续推进**：
+  - 新增 `Prompt Profile.output.reply_tags`，支持 `off` / `current_only` / `allow_explicit`
+  - system prompt 的 `Reply Tags` 段现在会按 profile 策略切换：可禁用 reply tags，或限制为只允许 `[[reply_to_current]]`
+  - 运行时 reply-tag 解析已接入同一策略：当 profile 禁用或限制 reply tags 时，输出中的 `[[reply_to_*]]` 会被剥离并按策略决定是否真正参与线程回复
+  - `/context detail`、system prompt report 和命令侧 prompt estimate 已显示 Prompt Profile 的 reply-tag 策略
+- **回归修复**：
+  - block reply 回调改为同步调用 + Promise 兜底捕错，修复相关流式 block reply 测试的时序回归
+- **本地验证通过**：
+  - `pnpm exec vitest run src/utils/directive-tags.test.ts src/auto-reply/reply/reply-utils.test.ts src/agents/prompt-profiles.test.ts src/agents/system-prompt.test.ts src/agents/system-prompt-report.test.ts src/auto-reply/reply/commands-context-report.test.ts src/auto-reply/reply/commands-system-prompt.test.ts src/agents/pi-embedded-runner/run/payloads.test.ts src/agents/pi-embedded-subscribe.reply-tags.test.ts src/agents/pi-embedded-subscribe.subscribe-embedded-pi-session.emits-block-replies-text-end-does-not.test.ts src/agents/pi-embedded-subscribe.block-reply-rejections.test.ts`
 
 ### 3/17: 真实 Gateway 端到端验证 + Prompt Profile 工具偏好 / 输出偏好 / final-tag + bugfix
 

@@ -37,6 +37,7 @@ describe("resolvePromptProfilePromptContext", () => {
         "    - concise",
         "    - comparison-first",
         "  require_final_tag: true",
+        "  reply_tags: current_only",
         "  rules:",
         "    - Include a recommendation at the end.",
         "    - Call out blockers explicitly.",
@@ -82,6 +83,7 @@ describe("resolvePromptProfilePromptContext", () => {
       sections: ["Summary", "Risks"],
       style: ["concise", "comparison-first"],
       requireFinalTag: true,
+      replyTags: "current_only",
       rules: ["Include a recommendation at the end.", "Call out blockers explicitly."],
     });
     expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Analysis frame]");
@@ -99,6 +101,7 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.appendSystemContext).toContain(
       "Wrap the final user-visible answer in <final>...</final>.",
     );
+    expect(result.appendSystemContext).toContain("Reply tag policy: current-only");
     expect(result.appendSystemContext).toContain("- Include a recommendation at the end.");
     expect(result.matchedModuleNames).toEqual([
       "Analysis frame",
@@ -170,6 +173,7 @@ describe("resolvePromptProfilePromptContext", () => {
         "output:",
         "  format: json",
         "  require_final_tag: true",
+        "  reply_tags: off",
         "  sections:",
         "    - answer",
         "  rules:",
@@ -189,6 +193,7 @@ describe("resolvePromptProfilePromptContext", () => {
       sections: ["answer"],
       style: [],
       requireFinalTag: true,
+      replyTags: "off",
       rules: ["Return valid JSON only."],
     });
     expect(result.appendSystemContext).toContain(
@@ -198,6 +203,7 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.appendSystemContext).toContain(
       "Wrap the final user-visible answer in <final>...</final>.",
     );
+    expect(result.appendSystemContext).toContain("Reply tag policy: disabled");
   });
 });
 

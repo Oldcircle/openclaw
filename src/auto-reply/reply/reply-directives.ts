@@ -1,5 +1,5 @@
 import { splitMediaFromOutput } from "../../media/parse.js";
-import { parseInlineDirectives } from "../../utils/directive-tags.js";
+import { parseInlineDirectives, type ReplyTagsMode } from "../../utils/directive-tags.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
 
 export type ReplyDirectiveParseResult = {
@@ -15,7 +15,7 @@ export type ReplyDirectiveParseResult = {
 
 export function parseReplyDirectives(
   raw: string,
-  options: { currentMessageId?: string; silentToken?: string } = {},
+  options: { currentMessageId?: string; silentToken?: string; replyTagsMode?: ReplyTagsMode } = {},
 ): ReplyDirectiveParseResult {
   const split = splitMediaFromOutput(raw);
   let text = split.text ?? "";
@@ -24,11 +24,9 @@ export function parseReplyDirectives(
     currentMessageId: options.currentMessageId,
     stripAudioTag: false,
     stripReplyTags: true,
+    replyTagsMode: options.replyTagsMode,
   });
-
-  if (replyParsed.hasReplyTag) {
-    text = replyParsed.text;
-  }
+  text = replyParsed.text;
 
   const silentToken = options.silentToken ?? SILENT_REPLY_TOKEN;
   const isSilent = isSilentReplyText(text, silentToken);

@@ -4,6 +4,7 @@ import type { ReasoningLevel, VerboseLevel } from "../../../auto-reply/thinking.
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../auto-reply/tokens.js";
 import { formatToolAggregate } from "../../../auto-reply/tool-meta.js";
 import type { OpenClawConfig } from "../../../config/config.js";
+import type { SessionSystemPromptReport } from "../../../config/sessions/types.js";
 import {
   BILLING_ERROR_USER_MESSAGE,
   formatAssistantErrorText,
@@ -103,6 +104,7 @@ export function buildEmbeddedRunPayloads(params: {
   inlineToolResultsAllowed: boolean;
   didSendViaMessagingTool?: boolean;
   didSendDeterministicApprovalPrompt?: boolean;
+  systemPromptReport?: SessionSystemPromptReport;
 }): Array<{
   text?: string;
   mediaUrl?: string;
@@ -126,6 +128,7 @@ export function buildEmbeddedRunPayloads(params: {
   }> = [];
 
   const useMarkdown = params.toolResultFormat === "markdown";
+  const replyTagsMode = params.systemPromptReport?.promptProfiles?.outputPreferences?.replyTags;
   const suppressAssistantArtifacts = params.didSendDeterministicApprovalPrompt === true;
   const lastAssistantErrored = params.lastAssistant?.stopReason === "error";
   const errorText =
@@ -175,7 +178,7 @@ export function buildEmbeddedRunPayloads(params: {
         replyToId,
         replyToTag,
         replyToCurrent,
-      } = parseReplyDirectives(agg);
+      } = parseReplyDirectives(agg, { replyTagsMode });
       if (cleanedText) {
         replyItems.push({
           text: cleanedText,
@@ -267,7 +270,7 @@ export function buildEmbeddedRunPayloads(params: {
       replyToId,
       replyToTag,
       replyToCurrent,
-    } = parseReplyDirectives(text);
+    } = parseReplyDirectives(text, { replyTagsMode });
     if (!cleanedText && (!mediaUrls || mediaUrls.length === 0) && !audioAsVoice) {
       continue;
     }

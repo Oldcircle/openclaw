@@ -220,6 +220,9 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const promptProfileRequireFinalTagLine = promptProfileOutputPreferences?.requireFinalTag
     ? "Prompt Profile output final tag: required"
     : undefined;
+  const promptProfileReplyTagsLine = promptProfileOutputPreferences?.replyTags
+    ? `Prompt Profile reply tags: ${promptProfileOutputPreferences.replyTags === "current_only" ? "current-only" : promptProfileOutputPreferences.replyTags === "allow_explicit" ? "allow-explicit" : "off"}`
+    : undefined;
   const promptProfileMatchedLine = promptProfileMatchedModuleNames.length
     ? `Active Prompt Profile modules: ${formatNameList(promptProfileMatchedModuleNames, 12)}`
     : report.source === "run" && promptProfile?.profileName
@@ -307,6 +310,7 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ...(promptProfileOutputStyleLine ? [promptProfileOutputStyleLine] : []),
     ...(promptProfileOutputRulesLine ? [promptProfileOutputRulesLine] : []),
     ...(promptProfileRequireFinalTagLine ? [promptProfileRequireFinalTagLine] : []),
+    ...(promptProfileReplyTagsLine ? [promptProfileReplyTagsLine] : []),
     ...(promptProfileMatchedLine ? [promptProfileMatchedLine] : []),
     ...(promptProfileAtDepthLine ? [promptProfileAtDepthLine] : []),
     "",

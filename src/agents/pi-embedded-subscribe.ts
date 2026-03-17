@@ -105,19 +105,26 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
   const messagingToolSentMediaUrls = state.messagingToolSentMediaUrls;
   const pendingMessagingTexts = state.pendingMessagingTexts;
   const pendingMessagingTargets = state.pendingMessagingTargets;
-  const replyDirectiveAccumulator = createStreamingDirectiveAccumulator();
-  const partialReplyDirectiveAccumulator = createStreamingDirectiveAccumulator();
+  const replyDirectiveAccumulator = createStreamingDirectiveAccumulator({
+    replyTagsMode: params.replyTagsMode,
+  });
+  const partialReplyDirectiveAccumulator = createStreamingDirectiveAccumulator({
+    replyTagsMode: params.replyTagsMode,
+  });
   const emitBlockReplySafely = (
     payload: Parameters<NonNullable<SubscribeEmbeddedPiSessionParams["onBlockReply"]>>[0],
   ) => {
     if (!params.onBlockReply) {
       return;
     }
-    void Promise.resolve()
-      .then(() => params.onBlockReply?.(payload))
-      .catch((err) => {
+    try {
+      const result = params.onBlockReply(payload);
+      void Promise.resolve(result).catch((err) => {
         log.warn(`block reply callback failed: ${String(err)}`);
       });
+    } catch (err) {
+      log.warn(`block reply callback failed: ${String(err)}`);
+    }
   };
 
   const resetAssistantMessageState = (nextAssistantTextBaseline: number) => {
@@ -451,7 +458,9 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     if (!params.onToolResult) {
       return;
     }
-    const { text: cleanedText, mediaUrls } = parseReplyDirectives(message);
+    const { text: cleanedText, mediaUrls } = parseReplyDirectives(message, {
+      replyTagsMode: params.replyTagsMode,
+    });
     const filteredMediaUrls = filterToolResultMediaUrls(toolName, mediaUrls ?? []);
     if (!cleanedText && filteredMediaUrls.length === 0) {
       return;

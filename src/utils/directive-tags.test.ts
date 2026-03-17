@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  parseInlineDirectives,
   stripInlineDirectiveTagsForDisplay,
   stripInlineDirectiveTagsFromMessageForDisplay,
 } from "./directive-tags.js";
@@ -55,5 +56,38 @@ describe("stripInlineDirectiveTagsFromMessageForDisplay", () => {
     };
     const result = stripInlineDirectiveTagsFromMessageForDisplay(input);
     expect(result).toEqual(input);
+  });
+});
+
+describe("parseInlineDirectives replyTagsMode", () => {
+  test("ignores reply tags when mode is off", () => {
+    const result = parseInlineDirectives("hi [[reply_to_current]] there", {
+      currentMessageId: "msg-1",
+      replyTagsMode: "off",
+    });
+
+    expect(result.text).toBe("hi there");
+    expect(result.replyToId).toBeUndefined();
+    expect(result.replyToCurrent).toBe(false);
+    expect(result.hasReplyTag).toBe(false);
+  });
+
+  test("allows only [[reply_to_current]] when mode is current_only", () => {
+    const explicit = parseInlineDirectives("[[reply_to:abc-123]] hi", {
+      currentMessageId: "msg-1",
+      replyTagsMode: "current_only",
+    });
+    const current = parseInlineDirectives("[[reply_to_current]] hi", {
+      currentMessageId: "msg-1",
+      replyTagsMode: "current_only",
+    });
+
+    expect(explicit.text).toBe("hi");
+    expect(explicit.replyToId).toBeUndefined();
+    expect(explicit.hasReplyTag).toBe(false);
+    expect(current.text).toBe("hi");
+    expect(current.replyToId).toBe("msg-1");
+    expect(current.replyToCurrent).toBe(true);
+    expect(current.hasReplyTag).toBe(true);
   });
 });

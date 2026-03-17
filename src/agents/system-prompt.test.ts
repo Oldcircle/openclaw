@@ -213,6 +213,28 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("do not forward raw internal metadata");
   });
 
+  it("disables reply tags when the Prompt Profile turns them off", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      replyTagsMode: "off",
+    });
+
+    expect(prompt).toContain("## Reply Tags");
+    expect(prompt).toContain("Do not include reply tags such as [[reply_to_current]]");
+    expect(prompt).not.toContain("Prefer [[reply_to_current]]. Use [[reply_to:<id>]]");
+  });
+
+  it("limits reply tags to [[reply_to_current]] when configured", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      replyTagsMode: "current_only",
+    });
+
+    expect(prompt).toContain("## Reply Tags");
+    expect(prompt).toContain("Use only [[reply_to_current]].");
+    expect(prompt).toContain("Do not use [[reply_to:<id>]] in this session.");
+  });
+
   it("guides subagent workflows to avoid polling loops", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/tmp/openclaw",

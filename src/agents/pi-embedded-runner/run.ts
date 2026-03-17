@@ -1507,6 +1507,7 @@ export async function runEmbeddedPiAgent(
             toolMetas: attempt.toolMetas,
             lastAssistant: attempt.lastAssistant,
             lastToolError: attempt.lastToolError,
+            systemPromptReport: attempt.systemPromptReport,
             config: params.config,
             sessionKey: params.sessionKey ?? params.sessionId,
             provider: activeErrorContext.provider,

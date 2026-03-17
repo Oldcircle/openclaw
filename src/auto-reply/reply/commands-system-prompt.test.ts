@@ -49,6 +49,8 @@ describe("resolveCommandsSystemPromptBundle", () => {
         "    - read",
         "  prefer:",
         "    - web_search",
+        "output:",
+        "  reply_tags: off",
       ].join("\n"),
       "utf8",
     );
@@ -63,9 +65,11 @@ describe("resolveCommandsSystemPromptBundle", () => {
     expect(result.promptProfileContext.toolPolicy).toEqual({
       allow: ["group:web", "read"],
     });
+    expect(result.promptProfileContext.outputPreferences?.replyTags).toBe("off");
     expect(result.systemPrompt).toContain("[Prompt Profile: Tooling / Tool Preferences]");
     expect(result.systemPrompt).toContain(
       "Prefer these tools or tool groups when relevant: web_search",
     );
+    expect(result.systemPrompt).toContain("Do not include reply tags such as [[reply_to_current]]");
   });
 });

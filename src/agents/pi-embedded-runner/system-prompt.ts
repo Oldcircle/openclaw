@@ -1,6 +1,7 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { MemoryCitationsMode } from "../../config/types.memory.js";
+import type { ReplyTagsMode } from "../../utils/directive-tags.js";
 import type { ResolvedTimeFormat } from "../date-time.js";
 import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
 import { buildAgentSystemPrompt, type PromptMode } from "../system-prompt.js";
@@ -21,6 +22,7 @@ export function buildEmbeddedSystemPrompt(params: {
   skillsPrompt?: string;
   docsPath?: string;
   ttsHint?: string;
+  replyTagsMode?: ReplyTagsMode;
   reactionGuidance?: {
     level: "minimal" | "extensive";
     channel: string;
@@ -67,6 +69,7 @@ export function buildEmbeddedSystemPrompt(params: {
     skillsPrompt: params.skillsPrompt,
     docsPath: params.docsPath,
     ttsHint: params.ttsHint,
+    replyTagsMode: params.replyTagsMode,
     workspaceNotes: params.workspaceNotes,
     reactionGuidance: params.reactionGuidance,
     promptMode: params.promptMode,

@@ -91,4 +91,40 @@ describe("buildEmbeddedRunPayloads tool-error warnings", () => {
 
     expect(payloads).toHaveLength(0);
   });
+
+  it("strips reply tags without threading when the Prompt Profile disables them", () => {
+    const payloads = buildPayloads({
+      assistantTexts: ["[[reply_to_current]] hi"],
+      systemPromptReport: {
+        source: "run",
+        generatedAt: 0,
+        systemPrompt: {
+          chars: 0,
+          projectContextChars: 0,
+          nonProjectContextChars: 0,
+        },
+        injectedWorkspaceFiles: [],
+        skills: { promptChars: 0, entries: [] },
+        tools: { listChars: 0, schemaChars: 0, entries: [] },
+        promptProfiles: {
+          promptChars: 0,
+          preferredTools: [],
+          matchedModuleNames: [],
+          moduleEntries: [],
+          atDepthEntries: [],
+          outputPreferences: {
+            sections: [],
+            style: [],
+            rules: [],
+            replyTags: "off",
+          },
+        },
+      },
+    });
+
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]?.text).toBe("hi");
+    expect(payloads[0]?.replyToId).toBeUndefined();
+    expect(payloads[0]?.replyToTag).toBe(false);
+  });
 });
