@@ -2340,6 +2340,53 @@ export async function runEmbeddedAttempt(
           }
           return extractPromptTextFromAgentMessage(historyMessages.at(-1));
         },
+        resolveAssetContext: () => {
+          const cb = systemPromptReport.contextBooks;
+          const pp = systemPromptReport.promptProfiles;
+          if (!cb && !pp) {
+            return undefined;
+          }
+          return {
+            agentCard:
+              agentCardPromptContext.defaultContextBook ||
+              agentCardPromptContext.defaultPromptProfile
+                ? {
+                    sourcePath: effectiveWorkspace,
+                    defaultContextBook: agentCardPromptContext.defaultContextBook,
+                    defaultPromptProfile: agentCardPromptContext.defaultPromptProfile,
+                  }
+                : undefined,
+            contextBooks: cb
+              ? {
+                  budgetPercent: cb.promptBudgetPercent,
+                  budgetChars: cb.promptBudgetChars,
+                  usedChars: cb.promptChars,
+                  matchedEntries: (cb.matchedEntryNames ?? []).map((name) => ({
+                    name,
+                    position: "unknown",
+                    chars: 0,
+                  })),
+                  skippedEntries: cb.skippedEntryNames ?? [],
+                }
+              : undefined,
+            promptProfile: pp
+              ? {
+                  name: pp.profileName ?? "unknown",
+                  sourcePath: pp.sourcePath,
+                  modules: (pp.moduleEntries ?? []).map((m) => ({
+                    name: m.name,
+                    position: m.position,
+                    chars: m.chars,
+                  })),
+                  streamParams: pp.streamParams,
+                  toolScope: pp.toolPolicy,
+                  preferredTools: pp.preferredTools,
+                  outputFormat: pp.outputPreferences?.format,
+                  replyTags: pp.outputPreferences?.replyTags,
+                }
+              : undefined,
+          };
+        },
       });
 
       const {

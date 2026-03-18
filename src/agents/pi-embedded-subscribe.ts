@@ -390,6 +390,7 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
           prompt,
           historyMessages,
           imagesCount,
+          assetContext: roundIndex === 0 ? params.resolveAssetContext?.() : undefined,
         },
         buildHookContext(),
       )

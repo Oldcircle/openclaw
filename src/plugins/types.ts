@@ -590,6 +590,33 @@ export const stripPromptMutationFieldsFromLegacyHookResult = (
     : undefined;
 };
 
+// Asset context metadata attached to llm_input hook for trace-viewer consumption.
+export type PluginHookAssetContext = {
+  agentCard?: {
+    name?: string;
+    sourcePath: string;
+    defaultContextBook?: string;
+    defaultPromptProfile?: string;
+  };
+  contextBooks?: {
+    budgetPercent?: number;
+    budgetChars?: number;
+    usedChars?: number;
+    matchedEntries: Array<{ name: string; position: string; chars: number }>;
+    skippedEntries: string[];
+  };
+  promptProfile?: {
+    name: string;
+    sourcePath?: string;
+    modules: Array<{ name: string; position: string; chars: number }>;
+    streamParams?: { temperature?: number; maxTokens?: number };
+    toolScope?: { allow?: string[]; deny?: string[] };
+    preferredTools?: string[];
+    outputFormat?: string;
+    replyTags?: string;
+  };
+};
+
 // llm_input hook
 // Fired once per assistant LLM call/round within a run, not once per run.
 export type PluginHookLlmInputEvent = {
@@ -601,6 +628,7 @@ export type PluginHookLlmInputEvent = {
   prompt: string;
   historyMessages: unknown[];
   imagesCount: number;
+  assetContext?: PluginHookAssetContext;
 };
 
 // llm_output hook

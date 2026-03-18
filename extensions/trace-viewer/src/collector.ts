@@ -142,6 +142,7 @@ export class TraceCollector {
       historyMessageSummaries: Array.isArray(event.historyMessages)
         ? this.extractHistoryMessageSummariesWithBlobs(event.historyMessages)
         : undefined,
+      assetContext: event.assetContext,
     });
 
     trace.llmInputQueue.push({ step, at: now });
@@ -149,6 +150,15 @@ export class TraceCollector {
     trace.detail.model = event.model;
     trace.detail.status = "running";
     trace.detail.llmCalls += 1;
+
+    if (event.assetContext) {
+      trace.detail.activeAssets = {
+        agentCard: event.assetContext.agentCard?.name,
+        contextBook: event.assetContext.agentCard?.defaultContextBook,
+        promptProfile: event.assetContext.promptProfile?.name,
+        contextBookHits: event.assetContext.contextBooks?.matchedEntries.length,
+      };
+    }
 
     const promptSnapshot = this.consumePromptSnapshot(ctx);
     if (promptSnapshot) {
@@ -831,6 +841,8 @@ function toDayKey(timestamp: number): string {
 }
 
 function categorize(name: string): PromptSectionCategory {
+  if (name.startsWith("Context Book: ")) return "context-book";
+  if (name.startsWith("Prompt Profile: ")) return "prompt-profile";
   const lower = name.toLowerCase();
   if (lower.includes("tool") || lower.includes("mcp")) return "tooling";
   if (lower.includes("safe") || lower.includes("guard")) return "safety";

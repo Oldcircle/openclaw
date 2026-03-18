@@ -16,7 +16,35 @@ export type PromptSectionCategory =
   | "skills"
   | "messaging"
   | "memory"
+  | "context-book"
+  | "prompt-profile"
   | "system";
+
+export type AssetContext = {
+  agentCard?: {
+    name?: string;
+    sourcePath: string;
+    defaultContextBook?: string;
+    defaultPromptProfile?: string;
+  };
+  contextBooks?: {
+    budgetPercent?: number;
+    budgetChars?: number;
+    usedChars?: number;
+    matchedEntries: Array<{ name: string; position: string; chars: number }>;
+    skippedEntries: string[];
+  };
+  promptProfile?: {
+    name: string;
+    sourcePath?: string;
+    modules: Array<{ name: string; position: string; chars: number }>;
+    streamParams?: { temperature?: number; maxTokens?: number };
+    toolScope?: { allow?: string[]; deny?: string[] };
+    preferredTools?: string[];
+    outputFormat?: string;
+    replyTags?: string;
+  };
+};
 
 export type PromptSection = {
   name: string;
@@ -51,6 +79,7 @@ export type LlmInputStep = {
   };
   promptSections?: PromptSection[];
   historyMessageSummaries?: HistoryMessageSummary[];
+  assetContext?: AssetContext;
 };
 
 export type LlmOutputStep = {
@@ -133,6 +162,12 @@ export type TraceSummary = {
   totalCacheReadTokens?: number;
   totalCacheWriteTokens?: number;
   estimatedCostUsd?: number;
+  activeAssets?: {
+    agentCard?: string;
+    contextBook?: string;
+    promptProfile?: string;
+    contextBookHits?: number;
+  };
 };
 
 export type TraceDetail = TraceSummary & {
