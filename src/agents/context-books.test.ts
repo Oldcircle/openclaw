@@ -658,6 +658,122 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(uncappedMatch![1].length).toBe(500);
   });
 
+  it("keeps a sticky entry active when keyword appeared in recent turns", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "sticky.yaml"),
+      [
+        "entries:",
+        "  - name: Sticky helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    scanDepth: 1",
+        "    sticky: 3",
+        "    position: tail_reminder",
+        "    content: |",
+        "      stays active after vite is mentioned",
+        "  - name: Narrow helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    scanDepth: 1",
+        "    position: tail_reminder",
+        "    content: |",
+        "      only active when vite is in the last message",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    // "vite" in an older message, not in the last message — but within sticky=3 turns window
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [
+        { role: "user", content: "help me set up vite" },
+        { role: "assistant", content: "Sure, here's how..." },
+        { role: "user", content: "thanks, now how do I add TypeScript?" },
+        { role: "assistant", content: "Add tsconfig.json..." },
+        { role: "user", content: "what about CSS modules?" },
+      ],
+    });
+
+    // Sticky entry should still be active (vite was within last 3*2=6 messages)
+    expect(result.matchedEntryNames).toContain("Sticky helper");
+    // Narrow entry should NOT match — "vite" is not in the last 1 message
+    expect(result.matchedEntryNames).not.toContain("Narrow helper");
+
+    // Now push "vite" out of the sticky window (sticky=3 → scans last 6 messages)
+    const result2 = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [
+        { role: "user", content: "help me set up vite" },
+        { role: "assistant", content: "Sure..." },
+        { role: "user", content: "question 1" },
+        { role: "assistant", content: "answer 1" },
+        { role: "user", content: "question 2" },
+        { role: "assistant", content: "answer 2" },
+        { role: "user", content: "question 3" },
+        { role: "assistant", content: "answer 3" },
+        { role: "user", content: "question 4" },
+        { role: "assistant", content: "answer 4" },
+        { role: "user", content: "final question" },
+      ],
+    });
+
+    // Sticky entry should NOT be active — "vite" is outside the 6-message window
+    expect(result2.matchedEntryNames).not.toContain("Sticky helper");
+    // Narrow entry also doesn't match
+    expect(result2.matchedEntryNames).not.toContain("Narrow helper");
+  });
+
+  it("delays entry activation until the chat has enough turns", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "delay.yaml"),
+      [
+        "entries:",
+        "  - name: Delayed helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    delay: 3",
+        "    position: tail_reminder",
+        "    content: |",
+        "      only activates after 3 user turns",
+        "  - name: Immediate helper",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      activates immediately",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    // Only 1 user turn — delayed entry should NOT activate
+    const result1 = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "help me with vite" }],
+    });
+    expect(result1.matchedEntryNames).not.toContain("Delayed helper");
+    expect(result1.matchedEntryNames).toContain("Immediate helper");
+
+    // 3 user turns — delayed entry SHOULD activate
+    const result3 = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [
+        { role: "user", content: "help me with vite" },
+        { role: "assistant", content: "Sure..." },
+        { role: "user", content: "more about vite" },
+        { role: "assistant", content: "..." },
+        { role: "user", content: "vite question" },
+      ],
+    });
+    expect(result3.matchedEntryNames).toContain("Delayed helper");
+    expect(result3.matchedEntryNames).toContain("Immediate helper");
+  });
+
   it("biases same-group selection toward higher groupWeight values across sessions", async () => {
     const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
     const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);

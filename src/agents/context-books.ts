@@ -64,6 +64,8 @@ type NormalizedContextBookEntry = {
   sourceIndex: number;
   scanDepth: number;
   tokenBudget: number;
+  sticky: number;
+  delay: number;
 };
 
 export type ContextBookPromptContext = {
@@ -117,6 +119,32 @@ function parseTokenBudget(value: unknown): number {
     return 0;
   }
   return Math.floor(value);
+}
+
+function parseSticky(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function parseDelay(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+// Estimate the current conversation turn count from the message array.
+// Each "turn" is roughly one user message, so we count user-role messages.
+function estimateTurnCount(messages: unknown[]): number {
+  let count = 0;
+  for (const msg of messages) {
+    if (isRecord(msg) && msg.role === "user") {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -308,6 +336,8 @@ function extractEntries(
       sourceIndex: index,
       scanDepth: parseScanDepth(rawEntry.scanDepth),
       tokenBudget: parseTokenBudget(rawEntry.tokenBudget),
+      sticky: parseSticky(rawEntry.sticky),
+      delay: parseDelay(rawEntry.delay),
     });
   }
 
@@ -505,17 +535,39 @@ function shouldInjectViaPromptContext(params: {
   entry: NormalizedContextBookEntry;
   defaultHaystack: string;
   messages: unknown[];
+  turnCount: number;
 }): boolean {
-  if (params.entry.alwaysActive && !SUPPORTED_BOOTSTRAP_POSITIONS.has(params.entry.position)) {
+  const { entry } = params;
+
+  // Delay: entry only activates after the chat has had at least N turns.
+  if (entry.delay > 0 && params.turnCount < entry.delay) {
+    return false;
+  }
+
+  if (entry.alwaysActive && !SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position)) {
     return true;
   }
+
   // When the entry has a custom scanDepth, build a scoped haystack from the
   // last N messages instead of using the default (full-history) haystack.
   const haystack =
-    params.entry.scanDepth > 0
-      ? buildMessageKeywordHaystack(params.messages, params.entry.scanDepth)
+    entry.scanDepth > 0
+      ? buildMessageKeywordHaystack(params.messages, entry.scanDepth)
       : params.defaultHaystack;
-  return matchesEntryKeywords(params.entry, haystack);
+  if (matchesEntryKeywords(entry, haystack)) {
+    return true;
+  }
+
+  // Sticky: if keyword was found in any of the last N turns, keep active
+  // even if the current message doesn't contain the keyword.
+  if (entry.sticky > 0 && entry.keywords.length > 0) {
+    const stickyHaystack = buildMessageKeywordHaystack(params.messages, entry.sticky * 2);
+    if (matchesEntryKeywords(entry, stickyHaystack)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function resolveContextBookSessionKind(sessionKey: string | undefined): ContextBookSessionKind {
@@ -850,6 +902,7 @@ export async function resolveContextBookPromptContext(params: {
   }
 
   const defaultHaystack = buildMessageKeywordHaystack(params.messages);
+  const turnCount = estimateTurnCount(params.messages);
   const groupedMatchedEntries = applyContextBookGroups({
     entries: entries.filter(
       (entry) =>
@@ -863,6 +916,7 @@ export async function resolveContextBookPromptContext(params: {
           entry,
           defaultHaystack,
           messages: params.messages,
+          turnCount,
         }),
     ),
     workspaceDir: params.workspaceDir,
