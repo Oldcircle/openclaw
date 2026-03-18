@@ -875,6 +875,56 @@ export async function loadContextBookBootstrapFiles(params: {
     }));
 }
 
+export type ResolvedContextBookSelection = {
+  contextBookName: string;
+  sourcePath: string;
+  selectedContextBook: string;
+};
+
+export async function resolveContextBookSelection(params: {
+  workspaceDir: string;
+  selectedContextBook: string;
+  warn?: (message: string) => void;
+}): Promise<ResolvedContextBookSelection | null> {
+  const selectedContextBook = params.selectedContextBook.trim();
+  if (!selectedContextBook) {
+    return null;
+  }
+
+  const workspaceDir = resolveUserPath(params.workspaceDir);
+  const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(contextBooksDir, { withFileTypes: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      params.warn?.(`context-books directory does not exist: ${contextBooksDir}`);
+      return null;
+    }
+    params.warn?.(`failed to read context-books directory: ${contextBooksDir}`);
+    return null;
+  }
+
+  const fileName = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => CONTEXT_BOOK_EXTENSIONS.has(path.extname(name).toLowerCase()))
+    .toSorted((a, b) => a.localeCompare(b))
+    .find((candidate) => matchesSelectedContextBook(candidate, selectedContextBook));
+  if (!fileName) {
+    params.warn?.(`context book "${selectedContextBook}" not found in ${contextBooksDir}`);
+    return null;
+  }
+
+  const baseName = path.basename(fileName, path.extname(fileName));
+  return {
+    contextBookName: baseName,
+    sourcePath: path.join(contextBooksDir, fileName),
+    selectedContextBook: baseName,
+  };
+}
+
 export async function resolveContextBookPromptContext(params: {
   workspaceDir: string;
   messages: unknown[];

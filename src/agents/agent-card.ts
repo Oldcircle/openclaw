@@ -319,6 +319,58 @@ export async function setAgentCardDefaultPromptProfile(params: {
   };
 }
 
+export type AgentCardDefaultContextBookUpdate = {
+  sourcePath: string;
+  created: boolean;
+  defaultContextBook: string;
+};
+
+export async function setAgentCardDefaultContextBook(params: {
+  workspaceDir: string;
+  defaultContextBook: string;
+}): Promise<AgentCardDefaultContextBookUpdate> {
+  const workspaceDir = resolveUserPath(params.workspaceDir);
+  const defaultContextBook = params.defaultContextBook.trim();
+  if (!defaultContextBook) {
+    throw new Error("Context book name cannot be empty.");
+  }
+
+  let sourcePath = path.join(workspaceDir, AGENT_CARD_FILENAMES[0]);
+  let created = true;
+  let card: RawAgentCard = {};
+
+  for (const fileName of AGENT_CARD_FILENAMES) {
+    const candidatePath = path.join(workspaceDir, fileName);
+    try {
+      await fs.access(candidatePath);
+    } catch {
+      continue;
+    }
+
+    created = false;
+    sourcePath = candidatePath;
+    const raw = await fs.readFile(candidatePath, "utf8");
+    const parsed = parseAgentCardDocument(raw, candidatePath);
+    if (!parsed) {
+      throw new Error(`Invalid agent card: ${candidatePath}`);
+    }
+    card = parsed;
+    break;
+  }
+
+  const nextCard: RawAgentCard = {
+    ...card,
+    default_context_book: defaultContextBook,
+  };
+  await fs.writeFile(sourcePath, formatAgentCardDocument(nextCard, sourcePath), "utf8");
+
+  return {
+    sourcePath,
+    created,
+    defaultContextBook,
+  };
+}
+
 export async function loadAgentCardBootstrapFiles(params: {
   workspaceDir: string;
   warn?: (message: string) => void;

@@ -3,6 +3,7 @@ import {
   assetsExportCommand,
   assetsImportCommand,
   assetsListCommand,
+  assetsMigrateCommand,
   assetsValidateCommand,
 } from "../commands/assets.js";
 import { defaultRuntime } from "../runtime.js";
@@ -65,6 +66,17 @@ export function registerAssetsCli(program: Command) {
       const agent = resolveOptionFromCommand<string>(command, "agent");
       await runAssetsCommand(async () => {
         await assetsImportCommand(file, defaultRuntime, { agent, force: opts.force });
+      });
+    });
+
+  assets
+    .command("migrate")
+    .description("Generate Agent Card from legacy bootstrap files (SOUL.md, IDENTITY.md, USER.md)")
+    .option("--dry-run", "Preview the generated Agent Card without writing", false)
+    .action(async (opts, command) => {
+      const agent = resolveOptionFromCommand<string>(command, "agent");
+      await runAssetsCommand(async () => {
+        await assetsMigrateCommand(defaultRuntime, { agent, dryRun: opts.dryRun });
       });
     });
 }

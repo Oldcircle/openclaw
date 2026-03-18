@@ -263,6 +263,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "context-book",
+    description: "Manage workspace Context Book defaults",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../context-book-cli.js");
+      mod.registerContextBookCli(program);
+    },
+  },
+  {
     name: "channels",
     description: "Manage connected chat channels (Telegram, Discord, etc.)",
     hasSubcommands: true,

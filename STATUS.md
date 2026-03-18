@@ -4,11 +4,11 @@
 
 ## 当前进度
 
-| 方向              | 状态   | 说明                                                                |
-| ----------------- | ------ | ------------------------------------------------------------------- |
-| trace-viewer 插件 | 已完成 | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过 |
-| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                  |
-| 资产化提示词系统  | 进行中 | P0-P4 核心已完成，P5.1-P5.2 已完成，P5.3 旧 workspace 迁移下一步    |
+| 方向              | 状态    | 说明                                                                |
+| ----------------- | ------- | ------------------------------------------------------------------- |
+| trace-viewer 插件 | 已完成  | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过 |
+| 核心 LLM hook     | 已完成  | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                  |
+| 资产化提示词系统  | P5 完成 | P0-P4 核心已完成，P5.1-P5.4 全部完成                                |
 
 ## 资产化提示词系统进度
 
@@ -21,8 +21,8 @@
 | P4   | 高级预算治理与深度注入 | 核心完成 | 已落地：`contextBookPromptBudgetPercent`、per-entry `scanDepth`/`tokenBudget`/`sticky`/`delay`；cooldown/excludeRecursion 待定 |
 | P5.1 | CLI 资产管理基础       | 已完成   | `openclaw assets list` / `openclaw assets validate` + CLI 注册 + 26 个测试通过                                                 |
 | P5.2 | Export / Import        | 已完成   | `openclaw assets export` / `openclaw assets import` + \_meta 元数据头 + 类型自动识别 + 9 个测试通过                            |
-| P5.3 | 旧 workspace 迁移      | 未开始   | SOUL/IDENTITY/USER.md → Agent Card 自动生成                                                                                    |
-| P5.4 | 交互式选择器           | 未开始   | `context-book use` / `assets switch`                                                                                           |
+| P5.3 | 旧 workspace 迁移      | 已完成   | `openclaw assets migrate` + dry-run + 结构化 SOUL.md 解析 + 8 个测试通过                                                       |
+| P5.4 | 交互式选择器           | 已完成   | `openclaw context-book use` + `setAgentCardDefaultContextBook` + 2 个 CLI 测试通过                                             |
 
 ## 当前待办
 
@@ -61,8 +61,8 @@
 - [x] P5.1: CLI 注册接线（`register.subclis.ts` + `assets-cli.ts`）
 - [x] P5.2: `openclaw assets export <name>` — 导出资产（带 `_meta` 元数据头）
 - [x] P5.2: `openclaw assets import <file>` — 导入资产到 workspace
-- [ ] P5.3: `openclaw assets migrate` — 旧 bootstrap 文件 → Agent Card 自动生成
-- [ ] P5.4: `openclaw context-book use` — 交互选择默认 Context Book
+- [x] P5.3: `openclaw assets migrate` — 旧 bootstrap 文件 → Agent Card 自动生成
+- [x] P5.4: `openclaw context-book use` — 设置默认 Context Book
 
 ## 已知问题
 
@@ -74,6 +74,23 @@
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
 ## 最新进展（2026-03-18）
+
+### 3/18: P5.3 + P5.4 完成 — 旧 workspace 迁移 + Context Book 选择器
+
+- **`openclaw assets migrate`**：
+  - 读取旧 `IDENTITY.md` / `SOUL.md` / `USER.md` 自动生成 `agent-card.yaml`
+  - `IDENTITY.md` → `identity` 字段
+  - `SOUL.md` → `personality` / `tone` 字段（支持结构化格式解析，否则整体作为 personality）
+  - `USER.md` → `user_relationship` 字段
+  - `--dry-run` 预览生成内容
+  - 已有 Agent Card 时跳过（不覆盖）
+  - 旧文件保留不删除
+- **`openclaw context-book use <name>`**：
+  - 设置 workspace Agent Card 的默认 Context Book（类似 `openclaw profile use`）
+  - 新增 `setAgentCardDefaultContextBook()` 和 `resolveContextBookSelection()`
+  - 写入 `agent-card.yaml` 的 `default_context_book` 字段
+- **CLI 注册**：migrate 加入 assets 子命令，context-book 作为独立 subcli 注册
+- **测试覆盖**：migrate 8 个 + context-book CLI 2 个，共 10 个新测试
 
 ### 3/18: P5.2 完成 — Export / Import
 
