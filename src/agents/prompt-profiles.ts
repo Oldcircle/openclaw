@@ -25,6 +25,7 @@ type RawPromptProfileDocument =
       maxTokens?: unknown;
       modules?: unknown;
       tools?: unknown;
+      output?: unknown;
     }
   | unknown[];
 

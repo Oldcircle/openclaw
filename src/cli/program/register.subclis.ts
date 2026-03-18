@@ -52,6 +52,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "assets",
+    description: "List and validate workspace assets",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../assets-cli.js");
+      mod.registerAssetsCli(program);
+    },
+  },
+  {
     name: "gateway",
     description: "Run, inspect, and query the WebSocket Gateway",
     hasSubcommands: true,

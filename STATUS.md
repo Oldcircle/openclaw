@@ -4,22 +4,25 @@
 
 ## 当前进度
 
-| 方向              | 状态   | 说明                                                                |
-| ----------------- | ------ | ------------------------------------------------------------------- |
-| trace-viewer 插件 | 已完成 | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过 |
-| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                  |
-| 资产化提示词系统  | 进行中 | P0-P3 已完成，P4/P5 待后续按需推进                                  |
+| 方向              | 状态   | 说明                                                                 |
+| ----------------- | ------ | -------------------------------------------------------------------- |
+| trace-viewer 插件 | 已完成 | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过  |
+| 核心 LLM hook     | 已完成 | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                   |
+| 资产化提示词系统  | 进行中 | P0-P4 核心已完成，P5.1 CLI 资产管理已完成，P5.2 Export/Import 下一步 |
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                                    |
-| ---- | ---------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                        |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                    |
-| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通           |
-| P3   | Prompt Profile 基础版  | 已完成 | 模块注入 + 模型参数 + 工具范围/偏好 + 输出偏好 + final-tag + reply-tags + `openclaw profile use` CLI                                    |
-| P4   | 高级预算治理与深度注入 | 进行中 | 已落地：可配置 `contextBookPromptBudgetPercent`、per-entry `scanDepth`/`tokenBudget`/`sticky`/`delay`；cooldown/excludeRecursion 待后续 |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                 |
+| 阶段 | 内容                   | 状态     | 备注                                                                                                                           |
+| ---- | ---------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| P0   | 基线与可观测性         | 已完成   | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                               |
+| P1   | Context Book 基础版    | 已完成   | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）           |
+| P2   | Agent Card 基础版      | 已完成   | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通  |
+| P3   | Prompt Profile 基础版  | 已完成   | 模块注入 + 模型参数 + 工具范围/偏好 + 输出偏好 + final-tag + reply-tags + `openclaw profile use` CLI                           |
+| P4   | 高级预算治理与深度注入 | 核心完成 | 已落地：`contextBookPromptBudgetPercent`、per-entry `scanDepth`/`tokenBudget`/`sticky`/`delay`；cooldown/excludeRecursion 待定 |
+| P5.1 | CLI 资产管理基础       | 已完成   | `openclaw assets list` / `openclaw assets validate` + CLI 注册 + 26 个测试通过                                                 |
+| P5.2 | Export / Import        | 未开始   | 资产导出导入，带元数据头                                                                                                       |
+| P5.3 | 旧 workspace 迁移      | 未开始   | SOUL/IDENTITY/USER.md → Agent Card 自动生成                                                                                    |
+| P5.4 | 交互式选择器           | 未开始   | `context-book use` / `assets switch`                                                                                           |
 
 ## 当前待办
 
@@ -51,8 +54,15 @@
 - [x] P4: per-entry `tokenBudget`（条目专属字符预算上限）
 - [x] P4: per-entry `sticky`（关键词在近 N 轮出现则保持激活，需配合 `scanDepth`）
 - [x] P4: per-entry `delay`（会话满 N 轮用户消息后才激活）
-- [ ] P4: `cooldown`（sticky 过期后冷却 N 轮，需 session 状态持久化）
-- [ ] P4: `excludeRecursion` / `preventRecursion`（递归扫描控制，暂不需要）
+- [ ] ~~P4: `cooldown`（待定，需 session 持久化）~~
+- [ ] ~~P4: `excludeRecursion`（待定，暂无真实需求）~~
+- [x] P5.1: `openclaw assets list` — 列出 workspace 全部资产（三类合并表格）
+- [x] P5.1: `openclaw assets validate` — 校验资产 schema 合法性
+- [x] P5.1: CLI 注册接线（`register.subclis.ts` + `assets-cli.ts`）
+- [ ] P5.2: `openclaw assets export <name>` — 导出资产（带 `_meta` 元数据头）
+- [ ] P5.2: `openclaw assets import <file>` — 导入资产到 workspace
+- [ ] P5.3: `openclaw assets migrate` — 旧 bootstrap 文件 → Agent Card 自动生成
+- [ ] P5.4: `openclaw context-book use` — 交互选择默认 Context Book
 
 ## 已知问题
 
@@ -64,6 +74,23 @@
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
 ## 最新进展（2026-03-18）
+
+### 3/18: P5.1 完成 — CLI 资产管理基础
+
+- **`openclaw assets list`**：
+  - 列出当前 workspace 全部资产（Agent Card + Context Book + Prompt Profile）
+  - 合并表格展示：类型 / 名称 / 文件名 / 是否为当前默认
+  - 支持 `--type` 过滤、`--json` 输出、`--agent` 指定 agent
+  - 从 Agent Card 的 `default_context_book` / `default_prompt_profile` 读取默认状态
+- **`openclaw assets validate`**：
+  - 校验 workspace 全部资产或指定文件的 schema 合法性
+  - Agent Card：检查字段类型、depth_prompt 结构、未知字段警告
+  - Context Book：检查条目结构、content 必填、position 枚举、数值字段类型
+  - Prompt Profile：检查 temperature/max_tokens/modules/tools/output 类型和结构
+  - 支持 `--json` 输出、`--agent` 指定 agent
+- **CLI 注册**：遵循 `register.subclis.ts` lazy-loading 模式，`assets-cli.ts` 注册两个子命令
+- **测试覆盖**：26 个测试全部通过（`assets.test.ts` + `assets-cli.test.ts`）
+- **附带修复**：`RawPromptProfileDocument` 类型缺少 `output` 字段导致的 TS 编译错误
 
 ### 3/18: P4 批量推进 — 预算配置化 + 条目生命周期控制
 
