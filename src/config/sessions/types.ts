@@ -377,6 +377,7 @@ export type SessionSystemPromptReport = {
       depth: number;
       chars: number;
     }>;
+    promptBudgetPercent?: number;
     promptBudgetChars?: number;
     promptChars?: number;
     skippedEntryNames?: string[];

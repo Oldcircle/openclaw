@@ -164,7 +164,11 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     : "Context Books (Project Context): none";
   const contextBookPromptBudgetLine =
     report.contextBooks && typeof report.contextBooks.promptBudgetChars === "number"
-      ? `Last run Context Book prompt budget: ${formatCharsAndTokens(report.contextBooks.promptBudgetChars)} / used ${formatCharsAndTokens(report.contextBooks.promptChars ?? 0)}`
+      ? `Last run Context Book prompt budget${
+          typeof report.contextBooks.promptBudgetPercent === "number"
+            ? ` (${formatInt(report.contextBooks.promptBudgetPercent)}%)`
+            : ""
+        }: ${formatCharsAndTokens(report.contextBooks.promptBudgetChars)} / used ${formatCharsAndTokens(report.contextBooks.promptChars ?? 0)}`
       : undefined;
   const contextBookSkippedLine =
     report.contextBooks?.skippedEntryNames && report.contextBooks.skippedEntryNames.length > 0

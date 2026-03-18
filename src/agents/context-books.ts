@@ -4,6 +4,7 @@ import syncFs from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import type { OpenClawConfig } from "../config/config.js";
 import { openBoundaryFile } from "../infra/boundary-file-read.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
@@ -19,7 +20,8 @@ export const CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX = "CONTEXT_BOOK:";
 const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const CONTEXT_BOOK_MAX_FILE_BYTES = 512 * 1024;
 const DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS = 6_000;
-const CONTEXT_BOOK_PROMPT_CONTEXT_SHARE = 0.25;
+const DEFAULT_CONTEXT_BOOK_PROMPT_BUDGET_PERCENT = 25;
+const MAX_CONTEXT_BOOK_PROMPT_BUDGET_PERCENT = 100;
 const CONTEXT_BOOK_PROMPT_CHARS_PER_TOKEN_ESTIMATE = 4;
 const SUPPORTED_BOOTSTRAP_POSITIONS = new Set(["before_context", "after_context"]);
 const SUPPORTED_PROMPT_POSITIONS = new Set([
@@ -71,6 +73,7 @@ export type ContextBookPromptContext = {
     depth: number;
   }>;
   matchedEntryNames: string[];
+  promptBudgetPercent?: number;
   promptBudgetChars?: number;
   promptChars?: number;
   skippedEntryNames?: string[];
@@ -656,7 +659,7 @@ function selectPromptEntriesWithinBudget(params: {
   skippedEntryNames: string[];
 } {
   const maxChars =
-    typeof params.maxChars === "number" && Number.isFinite(params.maxChars) && params.maxChars > 0
+    typeof params.maxChars === "number" && Number.isFinite(params.maxChars) && params.maxChars >= 0
       ? Math.floor(params.maxChars)
       : DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS;
   let remaining = maxChars;
@@ -689,10 +692,24 @@ function selectPromptEntriesWithinBudget(params: {
   };
 }
 
+function normalizeContextBookPromptBudgetPercent(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_CONTEXT_BOOK_PROMPT_BUDGET_PERCENT;
+  }
+  return Math.min(MAX_CONTEXT_BOOK_PROMPT_BUDGET_PERCENT, Math.max(0, Math.floor(value)));
+}
+
+export function resolveContextBookPromptBudgetPercent(cfg?: OpenClawConfig): number {
+  return normalizeContextBookPromptBudgetPercent(
+    cfg?.agents?.defaults?.contextBookPromptBudgetPercent,
+  );
+}
+
 export function calculateContextBookPromptMaxChars(params: {
   contextWindowTokens?: number;
   maxOutputTokens?: number;
   systemPromptChars?: number;
+  budgetPercent?: number;
 }): number {
   const contextWindowTokens =
     typeof params.contextWindowTokens === "number" &&
@@ -716,10 +733,11 @@ export function calculateContextBookPromptMaxChars(params: {
     params.systemPromptChars > 0
       ? Math.floor(params.systemPromptChars)
       : 0;
+  const budgetPercent = normalizeContextBookPromptBudgetPercent(params.budgetPercent);
   const totalChars = contextWindowTokens * CONTEXT_BOOK_PROMPT_CHARS_PER_TOKEN_ESTIMATE;
   const reservedOutputChars = maxOutputTokens * CONTEXT_BOOK_PROMPT_CHARS_PER_TOKEN_ESTIMATE;
   const availableChars = Math.max(0, totalChars - reservedOutputChars - systemPromptChars);
-  return Math.max(0, Math.floor(availableChars * CONTEXT_BOOK_PROMPT_CONTEXT_SHARE));
+  return Math.max(0, Math.floor((availableChars * budgetPercent) / 100));
 }
 
 export async function loadContextBookBootstrapFiles(params: {
@@ -776,6 +794,7 @@ export async function resolveContextBookPromptContext(params: {
   defaultContextBook?: string;
   contextMode?: BootstrapContextMode;
   runKind?: BootstrapContextRunKind;
+  promptBudgetPercent?: number;
   maxChars?: number;
   warn?: (message: string) => void;
 }): Promise<ContextBookPromptContext> {
@@ -820,6 +839,7 @@ export async function resolveContextBookPromptContext(params: {
     return {
       atDepthEntries: [],
       matchedEntryNames: [],
+      promptBudgetPercent: params.promptBudgetPercent,
       promptBudgetChars: budgeted.maxChars,
       promptChars: budgeted.usedChars,
       skippedEntryNames: budgeted.skippedEntryNames,
@@ -841,6 +861,7 @@ export async function resolveContextBookPromptContext(params: {
     appendSystemContext,
     atDepthEntries: buildAtDepthEntries(matched),
     matchedEntryNames: matched.map((entry) => entry.name),
+    promptBudgetPercent: params.promptBudgetPercent,
     promptBudgetChars: budgeted.maxChars,
     promptChars: budgeted.usedChars,
     skippedEntryNames: budgeted.skippedEntryNames,

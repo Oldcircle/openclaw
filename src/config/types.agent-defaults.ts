@@ -140,6 +140,8 @@ export type AgentDefaultsConfig = {
   bootstrapMaxChars?: number;
   /** Max total chars across all injected bootstrap files (default: 150000). */
   bootstrapTotalMaxChars?: number;
+  /** Share of remaining prompt context reserved for keyword-matched Context Book entries (0-100, default: 25). */
+  contextBookPromptBudgetPercent?: number;
   /**
    * Agent-visible bootstrap truncation warning mode:
    * - off: do not inject warning text

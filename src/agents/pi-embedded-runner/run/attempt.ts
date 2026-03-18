@@ -49,6 +49,7 @@ import {
 } from "../../channel-tools.js";
 import {
   calculateContextBookPromptMaxChars,
+  resolveContextBookPromptBudgetPercent,
   resolveContextBookPromptContext,
 } from "../../context-books.js";
 import { ensureCustomApiRegistered } from "../../custom-api-registry.js";
@@ -2453,6 +2454,7 @@ export async function runEmbeddedAttempt(
           promptProfileStreamParams: systemPromptReport.promptProfiles?.streamParams,
           streamParams: params.streamParams,
         });
+        const contextBookPromptBudgetPercent = resolveContextBookPromptBudgetPercent(params.cfg);
         const contextBookPromptContext = await resolveContextBookPromptContext({
           workspaceDir: params.workspaceDir,
           sessionKey: params.sessionKey,
@@ -2460,11 +2462,13 @@ export async function runEmbeddedAttempt(
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
           defaultContextBook: agentCardPromptContext.defaultContextBook,
           messages: activeSession.messages,
+          promptBudgetPercent: contextBookPromptBudgetPercent,
           maxChars: calculateContextBookPromptMaxChars({
             contextWindowTokens:
               params.model.contextWindow ?? params.model.maxTokens ?? DEFAULT_CONTEXT_TOKENS,
             maxOutputTokens: effectiveStreamParams?.maxTokens ?? params.model.maxTokens,
             systemPromptChars: systemPromptReport.systemPrompt.chars,
+            budgetPercent: contextBookPromptBudgetPercent,
           }),
           warn: (message) => log.warn(`context-books: ${message}`),
         });
@@ -2495,6 +2499,7 @@ export async function runEmbeddedAttempt(
             depth: entry.depth,
             chars: entry.content.length,
           })),
+          promptBudgetPercent: contextBookPromptContext.promptBudgetPercent,
           promptBudgetChars: contextBookPromptContext.promptBudgetChars,
           promptChars: contextBookPromptContext.promptChars,
           skippedEntryNames: contextBookPromptContext.skippedEntryNames,

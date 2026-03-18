@@ -6,6 +6,7 @@ import {
   calculateContextBookPromptMaxChars,
   CONTEXT_BOOKS_DIRNAME,
   loadContextBookBootstrapFiles,
+  resolveContextBookPromptBudgetPercent,
   resolveContextBookPromptContext,
 } from "./context-books.js";
 
@@ -230,6 +231,40 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(result.skippedEntryNames).toEqual(["Low priority"]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("prompt budget exceeded");
+  });
+
+  it("honors an explicit zero-char prompt budget", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "zero-budget.yaml"),
+      [
+        "entries:",
+        "  - name: Budgeted note",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    order: 10",
+        "    position: tail_reminder",
+        "    content: |",
+        "      visible only with budget",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite issue" }],
+      promptBudgetPercent: 0,
+      maxChars: 0,
+    });
+
+    expect(result.appendSystemContext).toBeUndefined();
+    expect(result.matchedEntryNames).toEqual([]);
+    expect(result.promptBudgetPercent).toBe(0);
+    expect(result.promptBudgetChars).toBe(0);
+    expect(result.promptChars).toBe(0);
+    expect(result.skippedEntryNames).toEqual(["Budgeted note"]);
   });
 
   it("keeps after_context entries ahead of tail_reminder entries in appended system context", async () => {
@@ -590,5 +625,32 @@ describe("calculateContextBookPromptMaxChars", () => {
         systemPromptChars: 400,
       }),
     ).toBe(700);
+  });
+
+  it("respects a configured budget percent", () => {
+    expect(
+      calculateContextBookPromptMaxChars({
+        contextWindowTokens: 1_000,
+        maxOutputTokens: 200,
+        systemPromptChars: 400,
+        budgetPercent: 10,
+      }),
+    ).toBe(280);
+  });
+});
+
+describe("resolveContextBookPromptBudgetPercent", () => {
+  it("defaults to 25 percent and clamps configured values", () => {
+    expect(resolveContextBookPromptBudgetPercent()).toBe(25);
+    expect(
+      resolveContextBookPromptBudgetPercent({
+        agents: { defaults: { contextBookPromptBudgetPercent: 10 } },
+      } as never),
+    ).toBe(10);
+    expect(
+      resolveContextBookPromptBudgetPercent({
+        agents: { defaults: { contextBookPromptBudgetPercent: 120 } },
+      } as never),
+    ).toBe(100);
   });
 });

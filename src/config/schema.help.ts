@@ -771,6 +771,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Max characters of each workspace bootstrap file injected into the system prompt before truncation (default: 20000).",
   "agents.defaults.bootstrapTotalMaxChars":
     "Max total characters across all injected workspace bootstrap files (default: 150000).",
+  "agents.defaults.contextBookPromptBudgetPercent":
+    "Percent of remaining prompt headroom reserved for keyword-matched Context Book entries after system prompt and output budget are accounted for (0-100, default: 25). Set 0 to keep only ignoreBudget entries in the prompt-context phase.",
   "agents.defaults.bootstrapPromptTruncationWarning":
     'Inject agent-visible warning text when bootstrap files are truncated: "off", "once" (default), or "always".',
   "agents.defaults.repoRoot":
