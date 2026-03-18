@@ -62,6 +62,8 @@ type NormalizedContextBookEntry = {
   position: ContextBookPosition;
   sourcePath: string;
   sourceIndex: number;
+  scanDepth: number;
+  tokenBudget: number;
 };
 
 export type ContextBookPromptContext = {
@@ -101,6 +103,20 @@ function parseGroupWeight(value: unknown): number {
 
 function parseDepth(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function parseScanDepth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function parseTokenBudget(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.floor(value);
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -290,6 +306,8 @@ function extractEntries(
       position,
       sourcePath,
       sourceIndex: index,
+      scanDepth: parseScanDepth(rawEntry.scanDepth),
+      tokenBudget: parseTokenBudget(rawEntry.tokenBudget),
     });
   }
 
@@ -444,8 +462,12 @@ function extractTextSegments(value: unknown): string[] {
   return segments;
 }
 
-function buildMessageKeywordHaystack(messages: unknown[]): string {
-  return messages
+function buildMessageKeywordHaystack(messages: unknown[], scanDepth?: number): string {
+  const slice =
+    typeof scanDepth === "number" && scanDepth > 0 && scanDepth < messages.length
+      ? messages.slice(-scanDepth)
+      : messages;
+  return slice
     .flatMap((message) => extractTextSegments(message))
     .map((segment) => segment.trim().toLowerCase())
     .filter((segment) => segment.length > 0)
@@ -479,14 +501,21 @@ function matchesEntryKeywords(entry: NormalizedContextBookEntry, haystack: strin
   }
 }
 
-function shouldInjectViaPromptContext(
-  entry: NormalizedContextBookEntry,
-  haystack: string,
-): boolean {
-  if (entry.alwaysActive && !SUPPORTED_BOOTSTRAP_POSITIONS.has(entry.position)) {
+function shouldInjectViaPromptContext(params: {
+  entry: NormalizedContextBookEntry;
+  defaultHaystack: string;
+  messages: unknown[];
+}): boolean {
+  if (params.entry.alwaysActive && !SUPPORTED_BOOTSTRAP_POSITIONS.has(params.entry.position)) {
     return true;
   }
-  return matchesEntryKeywords(entry, haystack);
+  // When the entry has a custom scanDepth, build a scoped haystack from the
+  // last N messages instead of using the default (full-history) haystack.
+  const haystack =
+    params.entry.scanDepth > 0
+      ? buildMessageKeywordHaystack(params.messages, params.entry.scanDepth)
+      : params.defaultHaystack;
+  return matchesEntryKeywords(params.entry, haystack);
 }
 
 function resolveContextBookSessionKind(sessionKey: string | undefined): ContextBookSessionKind {
@@ -667,14 +696,23 @@ function selectPromptEntriesWithinBudget(params: {
   const skippedEntryNames: string[] = [];
 
   for (const entry of params.entries) {
-    const rendered = formatPromptContextEntry(entry);
+    // Apply per-entry tokenBudget: if the entry's content exceeds its own
+    // budget, use a truncated copy so it only consumes that many chars.
+    const effectiveEntry =
+      entry.tokenBudget > 0 && entry.content.length > entry.tokenBudget
+        ? {
+            ...entry,
+            content: entry.content.slice(0, entry.tokenBudget),
+          }
+        : entry;
+    const rendered = formatPromptContextEntry(effectiveEntry);
     const cost = rendered.length + (selected.length > 0 ? 2 : 0);
     if (entry.ignoreBudget) {
-      selected.push(entry);
+      selected.push(effectiveEntry);
       continue;
     }
     if (cost <= remaining) {
-      selected.push(entry);
+      selected.push(effectiveEntry);
       remaining -= cost;
       continue;
     }
@@ -811,7 +849,7 @@ export async function resolveContextBookPromptContext(params: {
     return { atDepthEntries: [], matchedEntryNames: [] };
   }
 
-  const haystack = buildMessageKeywordHaystack(params.messages);
+  const defaultHaystack = buildMessageKeywordHaystack(params.messages);
   const groupedMatchedEntries = applyContextBookGroups({
     entries: entries.filter(
       (entry) =>
@@ -820,13 +858,18 @@ export async function resolveContextBookPromptContext(params: {
           sessionKey: params.sessionKey,
           agentId: params.agentId,
           channelId: params.channelId,
-        }) && shouldInjectViaPromptContext(entry, haystack),
+        }) &&
+        shouldInjectViaPromptContext({
+          entry,
+          defaultHaystack,
+          messages: params.messages,
+        }),
     ),
     workspaceDir: params.workspaceDir,
     sessionKey: params.sessionKey,
     agentId: params.agentId,
     channelId: params.channelId,
-    haystack,
+    haystack: defaultHaystack,
     phase: "prompt",
   });
   const budgeted = selectPromptEntriesWithinBudget({

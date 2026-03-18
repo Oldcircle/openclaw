@@ -563,6 +563,101 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(files.map((file) => file.name)).toContain("CONTEXT_BOOK:Safety guard");
   });
 
+  it("limits keyword scanning to the last N messages when scanDepth is set", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(contextBooksDir, "scan-depth.yaml"),
+      [
+        "entries:",
+        "  - name: Recent only",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    scanDepth: 1",
+        "    position: tail_reminder",
+        "    content: |",
+        "      only matches if vite appears in the last message",
+        "  - name: Full history",
+        "    enabled: true",
+        "    keywords: [webpack]",
+        "    position: tail_reminder",
+        "    content: |",
+        "      matches webpack anywhere in history",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    // "webpack" only appears in an old message; "vite" only in an old message
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [
+        { role: "user", content: "I have a webpack project" },
+        { role: "assistant", content: "Let me help with vite migration" },
+        { role: "user", content: "Actually I want to keep my current setup" },
+      ],
+    });
+
+    // Full-history entry should match webpack from old message
+    expect(result.matchedEntryNames).toContain("Full history");
+    // scanDepth=1 entry should NOT match because "vite" is not in the last message
+    expect(result.matchedEntryNames).not.toContain("Recent only");
+
+    // When "vite" appears in the last message, scanDepth=1 should match
+    const result2 = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [
+        { role: "user", content: "I have a webpack project" },
+        { role: "user", content: "Let me try vite instead" },
+      ],
+    });
+    expect(result2.matchedEntryNames).toContain("Recent only");
+    expect(result2.matchedEntryNames).toContain("Full history");
+  });
+
+  it("truncates entry content to per-entry tokenBudget", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
+    const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+    await fs.mkdir(contextBooksDir, { recursive: true });
+    const longContent = "x".repeat(500);
+    await fs.writeFile(
+      path.join(contextBooksDir, "token-budget.yaml"),
+      [
+        "entries:",
+        "  - name: Capped entry",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    tokenBudget: 50",
+        "    position: tail_reminder",
+        `    content: "${longContent}"`,
+        "  - name: Uncapped entry",
+        "    enabled: true",
+        "    keywords: [vite]",
+        "    position: tail_reminder",
+        `    content: "${longContent}"`,
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await resolveContextBookPromptContext({
+      workspaceDir,
+      messages: [{ role: "user", content: "vite build" }],
+    });
+
+    const appended = result.appendSystemContext ?? "";
+    // The capped entry should have truncated content (50 chars of "x")
+    expect(appended).toContain("[Context Book: Capped entry]");
+    expect(appended).toContain("[Context Book: Uncapped entry]");
+    // Capped entry's x-run should be exactly 50 chars
+    const cappedMatch = appended.match(/\[Context Book: Capped entry\]\n(x+)/);
+    expect(cappedMatch).toBeTruthy();
+    expect(cappedMatch![1].length).toBe(50);
+    // Uncapped entry's x-run should be full 500 chars
+    const uncappedMatch = appended.match(/\[Context Book: Uncapped entry\]\n(x+)/);
+    expect(uncappedMatch).toBeTruthy();
+    expect(uncappedMatch![1].length).toBe(500);
+  });
+
   it("biases same-group selection toward higher groupWeight values across sessions", async () => {
     const workspaceDir = await makeTempWorkspace("openclaw-context-books-");
     const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
