@@ -184,17 +184,17 @@ depth_prompt:
 
 **P1 核心 schema 已齐**，后续预算治理增强仍放在 P4（sticky/cooldown、更细粒度 budget 等）。
 
-**P4 扩展字段（暂不实现）**：
+**P4 扩展字段**：
 
-| 字段               | 类型    | 说明                                  |
-| ------------------ | ------- | ------------------------------------- |
-| `sticky`           | number  | 激活后保持 N 轮（即使关键词不再出现） |
-| `cooldown`         | number  | sticky 结束后冷却 N 轮不可再激活      |
-| `delay`            | number  | 聊天开始后延迟 N 轮才允许激活         |
-| `excludeRecursion` | boolean | 递归扫描时跳过此条目                  |
-| `preventRecursion` | boolean | 此条目的内容不触发后续递归            |
-| `scanDepth`        | number  | 条目专属扫描深度（覆盖全局）          |
-| `tokenBudget`      | number  | 条目专属 token 上限                   |
+| 字段               | 类型    | 状态   | 说明                                                      |
+| ------------------ | ------- | ------ | --------------------------------------------------------- |
+| `scanDepth`        | number  | 已落地 | 条目专属扫描深度（只扫描最近 N 条消息）                   |
+| `tokenBudget`      | number  | 已落地 | 条目专属字符上限（超出时截断）                            |
+| `sticky`           | number  | 已落地 | 关键词在近 N 轮出现则保持激活（无状态，需配合 scanDepth） |
+| `delay`            | number  | 已落地 | 会话满 N 轮用户消息后才允许激活                           |
+| `cooldown`         | number  | 未实现 | sticky 结束后冷却 N 轮不可再激活（需 session 状态持久化） |
+| `excludeRecursion` | boolean | 未实现 | 递归扫描时跳过此条目（当前无递归扫描，暂不需要）          |
+| `preventRecursion` | boolean | 未实现 | 此条目的内容不触发后续递归（当前无递归扫描，暂不需要）    |
 
 **与 ST 世界书的关键差异**：
 
@@ -478,10 +478,16 @@ context_book_budget = available_budget × context_book_budget_percent
 - Context Book 预算溢出时在日志中警告
 - 长会话关键规则回钉（sticky 机制确保重要规则在窗口内持续存在）
 
-**当前已开始（2026-03-17）**：
+**当前已落地（截至 2026-03-18）**：
 
+- `contextBookPromptBudgetPercent` 可通过 `agents.defaults` 配置（0-100，默认 25）
 - Context Book prompt budget 已接入运行时计算：基于模型 context window、max output tokens 和当前 system prompt 体积动态求得
-- `/context detail` 已开始显示 Context Book prompt budget、已使用 chars，以及被预算跳过的条目
+- `/context detail` 已显示 Context Book prompt budget 百分比、已使用 chars，以及被预算跳过的条目
+- Per-entry `scanDepth`：条目专属关键词扫描深度
+- Per-entry `tokenBudget`：条目专属字符预算上限（超出时截断）
+- Per-entry `sticky`：关键词在近 N 轮出现则保持激活（无状态，基于消息回溯）
+- Per-entry `delay`：会话满 N 轮用户消息后才激活
+- `cooldown` 需 session 状态持久化，暂未实现
 
 ---
 

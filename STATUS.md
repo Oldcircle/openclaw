@@ -12,14 +12,14 @@
 
 ## 资产化提示词系统进度
 
-| 阶段 | 内容                   | 状态   | 备注                                                                                                                          |
-| ---- | ---------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                              |
-| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）          |
-| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通 |
-| P3   | Prompt Profile 基础版  | 已完成 | 模块注入 + 模型参数 + 工具范围/偏好 + 输出偏好 + final-tag + reply-tags + `openclaw profile use` CLI                          |
-| P4   | 高级预算治理与深度注入 | 进行中 | 已启动第一步：Context Book prompt budget 动态计算 + `/context detail` 预算可观测；sticky/cooldown 等后续继续推进              |
-| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                       |
+| 阶段 | 内容                   | 状态   | 备注                                                                                                                                    |
+| ---- | ---------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| P0   | 基线与可观测性         | 已完成 | 3/17 通过真实 Gateway `/context detail` 记录基线                                                                                        |
+| P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）                    |
+| P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通           |
+| P3   | Prompt Profile 基础版  | 已完成 | 模块注入 + 模型参数 + 工具范围/偏好 + 输出偏好 + final-tag + reply-tags + `openclaw profile use` CLI                                    |
+| P4   | 高级预算治理与深度注入 | 进行中 | 已落地：可配置 `contextBookPromptBudgetPercent`、per-entry `scanDepth`/`tokenBudget`/`sticky`/`delay`；cooldown/excludeRecursion 待后续 |
+| P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                                 |
 
 ## 当前待办
 
@@ -46,6 +46,13 @@
 - [x] trace-viewer: 前端对接 blob API（在 trace-viewer 项目侧）
 - [x] trace-viewer: live running trace 通过插件 API 暴露给前端
 - [x] trace-viewer: 用真实 Gateway 验证 API 端点（health/list/detail/date-filter/status-filter 均通过，3/17）
+- [x] P4: 可配置 `contextBookPromptBudgetPercent`（0-100，默认 25）
+- [x] P4: per-entry `scanDepth`（条目专属关键词扫描深度）
+- [x] P4: per-entry `tokenBudget`（条目专属字符预算上限）
+- [x] P4: per-entry `sticky`（关键词在近 N 轮出现则保持激活，需配合 `scanDepth`）
+- [x] P4: per-entry `delay`（会话满 N 轮用户消息后才激活）
+- [ ] P4: `cooldown`（sticky 过期后冷却 N 轮，需 session 状态持久化）
+- [ ] P4: `excludeRecursion` / `preventRecursion`（递归扫描控制，暂不需要）
 
 ## 已知问题
 
@@ -56,7 +63,30 @@
 - ~~`loadAgentCardDocument` 返回 `[]` 导致 Agent Card 静默失效~~ → 已修复（3/17，`return []` → `return null`）
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
-## 最新进展（2026-03-17）
+## 最新进展（2026-03-18）
+
+### 3/18: P4 批量推进 — 预算配置化 + 条目生命周期控制
+
+- **`contextBookPromptBudgetPercent` 可配置化**：
+  - 从硬编码 25% 升级为 `agents.defaults.contextBookPromptBudgetPercent`（0-100）
+  - config schema、help text、labels、Zod 校验均已接入
+  - `/context detail` 显示百分比
+- **Per-entry `scanDepth`**：
+  - 条目专属关键词扫描深度，只扫描最近 N 条消息
+  - 用于限制关键词触发的时间窗口（如只看最近一条消息）
+- **Per-entry `tokenBudget`**：
+  - 条目专属字符预算上限，超出时自动截断内容
+  - 防止单个大条目占满全局预算
+- **Per-entry `sticky`**：
+  - 关键词在近 N 轮出现则保持条目激活（扫描 `sticky*2` 条消息）
+  - 需配合 `scanDepth` 使用（否则全量扫描已覆盖 sticky 窗口）
+  - 无状态实现：基于消息回溯而非 session 持久化
+- **Per-entry `delay`**：
+  - 会话满 N 轮用户消息后才允许条目激活
+  - 基于 `messages` 中 user role 消息计数，无状态
+- **测试覆盖**：所有新字段均有独立测试用例，115 个相关测试全部通过
+
+## 之前进展（2026-03-17）
 
 ### 3/17: Prompt Profile `reply_tags` 接通到 system prompt / 运行时解析 / `/context detail`
 

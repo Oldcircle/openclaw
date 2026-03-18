@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-03-18
+
+### P4 批量推进：预算配置化 + 条目生命周期控制
+
+- 修改 `src/agents/context-books.ts`
+  - `contextBookPromptBudgetPercent`：从硬编码 `0.25` 升级为可配置百分比（0-100），通过 `agents.defaults.contextBookPromptBudgetPercent` 设置
+  - 新增 `resolveContextBookPromptBudgetPercent()` 从 config 读取并 clamp 到 0-100
+  - `calculateContextBookPromptMaxChars()` 接受 `budgetPercent` 参数
+  - 新增 `scanDepth` 字段：per-entry 关键词扫描深度，只扫描最近 N 条消息
+  - 新增 `tokenBudget` 字段：per-entry 字符预算上限，在 `selectPromptEntriesWithinBudget` 中截断超限内容
+  - 新增 `sticky` 字段：当关键词在近 `sticky*2` 条消息中出现时保持条目激活（需配合 `scanDepth` 使用）
+  - 新增 `delay` 字段：会话满 N 轮用户消息后才允许条目激活
+  - `shouldInjectViaPromptContext` 重构为接受 `messages` + `turnCount` 参数
+  - `buildMessageKeywordHaystack` 支持可选 `scanDepth` 参数
+- 修改 `src/agents/pi-embedded-runner/run/attempt.ts`
+  - 运行时读取 `contextBookPromptBudgetPercent` 并传入预算计算
+- 修改 `src/auto-reply/reply/commands-context-report.ts`
+  - `/context detail` 显示 Context Book prompt budget 百分比
+- 修改 config schema 相关文件
+  - `src/config/types.agent-defaults.ts`：新增 `contextBookPromptBudgetPercent` 字段
+  - `src/config/zod-schema.agent-defaults.ts`：Zod 校验（`z.number().int().min(0).max(100)`）
+  - `src/config/schema.help.ts`、`src/config/schema.labels.ts`：help text 和 label
+  - `src/config/sessions/types.ts`：`systemPromptReport.contextBooks` 新增 `promptBudgetPercent`
+
+### 验证
+
+- `pnpm exec vitest run src/agents/context-books.test.ts src/auto-reply/reply/commands-context-report.test.ts src/agents/pi-embedded-runner/run/attempt.test.ts src/agents/system-prompt-report.test.ts src/agents/bootstrap-files.test.ts`
+- 115 个测试全部通过
+
+---
+
 ## 2026-03-17
 
 ### Prompt Profile：结构化输出偏好
