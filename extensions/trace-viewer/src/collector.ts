@@ -831,8 +831,6 @@ function toDayKey(timestamp: number): string {
 }
 
 function categorize(name: string): PromptSectionCategory {
-  if (name.startsWith("Context Book: ")) return "context-book";
-  if (name.startsWith("Prompt Profile: ")) return "prompt-profile";
   const lower = name.toLowerCase();
   if (lower.includes("tool") || lower.includes("mcp")) return "tooling";
   if (lower.includes("safe") || lower.includes("guard")) return "safety";
@@ -855,17 +853,6 @@ function categorize(name: string): PromptSectionCategory {
   return "system";
 }
 
-// Match `[Context Book: xxx]` or `[Prompt Profile: xxx / yyy]` markers that
-// appear on their own line.  These are injected by the asset system and should
-// be treated as section boundaries so the viewer can display them individually.
-const ASSET_MARKER_RE = /^\[(?:Context Book|Prompt Profile): .+\]$/;
-
-function parseAssetMarkerName(line: string): string | undefined {
-  if (!ASSET_MARKER_RE.test(line)) return undefined;
-  // Strip outer brackets: "[Context Book: foo]" → "Context Book: foo"
-  return line.slice(1, -1);
-}
-
 function parsePromptSections(systemPrompt?: string): PromptSection[] {
   if (!systemPrompt) return [];
   const lines = systemPrompt.split("\n");
@@ -874,28 +861,7 @@ function parsePromptSections(systemPrompt?: string): PromptSection[] {
   let currentStart = 0;
   let inWorkspaceFile = false;
 
-  function flushSection(endLine: number): void {
-    const content = lines.slice(currentStart, endLine).join("\n").trim();
-    if (content) {
-      sections.push({
-        name: currentName,
-        chars: content.length,
-        category: categorize(currentName),
-      });
-    }
-  }
-
   for (let i = 0; i < lines.length; i++) {
-    // Asset markers: [Context Book: ...] / [Prompt Profile: ...]
-    const assetName = parseAssetMarkerName(lines[i].trim());
-    if (assetName) {
-      flushSection(i);
-      currentName = assetName;
-      currentStart = i + 1;
-      inWorkspaceFile = false;
-      continue;
-    }
-
     if (!lines[i]?.startsWith("## ")) continue;
     const header = lines[i].slice(3).trim();
     const isWorkspacePath = header.startsWith("/") || header.startsWith("~/");
@@ -903,13 +869,27 @@ function parsePromptSections(systemPrompt?: string): PromptSection[] {
     // Workspace file sub-headers (paths) are grouped under the workspace section
     if (inWorkspaceFile && isWorkspacePath) continue;
 
-    flushSection(i);
+    const content = lines.slice(currentStart, i).join("\n").trim();
+    if (content) {
+      sections.push({
+        name: currentName,
+        chars: content.length,
+        category: categorize(currentName),
+      });
+    }
     currentName = header;
     currentStart = i + 1;
     inWorkspaceFile = isWorkspacePath;
   }
 
-  flushSection(lines.length);
+  const lastContent = lines.slice(currentStart).join("\n").trim();
+  if (lastContent) {
+    sections.push({
+      name: currentName,
+      chars: lastContent.length,
+      category: categorize(currentName),
+    });
+  }
   return sections;
 }
 
