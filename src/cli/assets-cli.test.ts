@@ -4,10 +4,14 @@ import { runRegisteredCli } from "../test-utils/command-runner.js";
 
 const assetsListCommand = vi.fn().mockResolvedValue(undefined);
 const assetsValidateCommand = vi.fn().mockResolvedValue(undefined);
+const assetsExportCommand = vi.fn().mockResolvedValue(undefined);
+const assetsImportCommand = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../commands/assets.js", () => ({
   assetsListCommand,
   assetsValidateCommand,
+  assetsExportCommand,
+  assetsImportCommand,
 }));
 
 describe("assets cli", () => {
@@ -20,6 +24,8 @@ describe("assets cli", () => {
   beforeEach(() => {
     assetsListCommand.mockClear();
     assetsValidateCommand.mockClear();
+    assetsExportCommand.mockClear();
+    assetsImportCommand.mockClear();
   });
 
   it("calls assetsListCommand for assets list", async () => {
@@ -105,6 +111,71 @@ describe("assets cli", () => {
     expect(assetsValidateCommand).toHaveBeenCalledWith(
       expect.any(Object),
       [],
+      expect.objectContaining({ agent: "poe" }),
+    );
+  });
+
+  it("calls assetsExportCommand for assets export", async () => {
+    await runRegisteredCli({
+      register: registerAssetsCli as (program: Command) => void,
+      argv: ["assets", "export", "my-card"],
+    });
+
+    expect(assetsExportCommand).toHaveBeenCalledWith(
+      "my-card",
+      expect.any(Object),
+      expect.objectContaining({ agent: undefined }),
+    );
+  });
+
+  it("passes --output to export", async () => {
+    await runRegisteredCli({
+      register: registerAssetsCli as (program: Command) => void,
+      argv: ["assets", "export", "my-card", "--output", "/tmp/out.yaml"],
+    });
+
+    expect(assetsExportCommand).toHaveBeenCalledWith(
+      "my-card",
+      expect.any(Object),
+      expect.objectContaining({ output: "/tmp/out.yaml" }),
+    );
+  });
+
+  it("calls assetsImportCommand for assets import", async () => {
+    await runRegisteredCli({
+      register: registerAssetsCli as (program: Command) => void,
+      argv: ["assets", "import", "my-card.yaml"],
+    });
+
+    expect(assetsImportCommand).toHaveBeenCalledWith(
+      "my-card.yaml",
+      expect.any(Object),
+      expect.objectContaining({ agent: undefined, force: false }),
+    );
+  });
+
+  it("passes --force to import", async () => {
+    await runRegisteredCli({
+      register: registerAssetsCli as (program: Command) => void,
+      argv: ["assets", "import", "my-card.yaml", "--force"],
+    });
+
+    expect(assetsImportCommand).toHaveBeenCalledWith(
+      "my-card.yaml",
+      expect.any(Object),
+      expect.objectContaining({ force: true }),
+    );
+  });
+
+  it("passes --agent to export via parent option", async () => {
+    await runRegisteredCli({
+      register: registerAssetsCli as (program: Command) => void,
+      argv: ["assets", "--agent", "poe", "export", "my-card"],
+    });
+
+    expect(assetsExportCommand).toHaveBeenCalledWith(
+      "my-card",
+      expect.any(Object),
       expect.objectContaining({ agent: "poe" }),
     );
   });
