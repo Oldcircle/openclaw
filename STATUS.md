@@ -64,7 +64,8 @@
 - [x] P5.3: `openclaw assets migrate` — 旧 bootstrap 文件 → Agent Card 自动生成
 - [x] P5.4: `openclaw context-book use` — 设置默认 Context Book
 - [x] trace-viewer Phase A: `llm_input` hook payload 新增 `assetContext` 字段
-- [x] trace-viewer Phase B: collector 消费 `assetContext`，恢复 `context-book`/`prompt-profile` section 分类，summary 新增 `activeAssets`
+- [x] trace-viewer Phase B: collector 消费 `assetContext`，恢复 section 分类，summary 新增 `activeAssets`
+- [x] trace-viewer Phase C: viewer 资产面板 + 侧边栏交互 + System Prompt 结构标注 + 列表页标签 + 诊断规则
 
 ## 已知问题
 

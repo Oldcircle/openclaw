@@ -2361,28 +2361,57 @@ export async function runEmbeddedAttempt(
                   budgetPercent: cb.promptBudgetPercent,
                   budgetChars: cb.promptBudgetChars,
                   usedChars: cb.promptChars,
-                  matchedEntries: (cb.matchedEntryNames ?? []).map((name) => ({
-                    name,
-                    position: "unknown",
-                    chars: 0,
-                  })),
+                  matchedEntries: (cb.matchedEntryNames ?? []).map((name) => {
+                    const bootstrap = cb.projectContextEntries?.find((e) => e.name.includes(name));
+                    return {
+                      name,
+                      position: bootstrap ? "bootstrap" : "runtime",
+                      chars: bootstrap?.injectedChars ?? 0,
+                    };
+                  }),
                   skippedEntries: cb.skippedEntryNames ?? [],
+                  bootstrapEntries: cb.projectContextEntries?.map((e) => ({
+                    name: e.name,
+                    rawChars: e.rawChars,
+                    injectedChars: e.injectedChars,
+                    truncated: e.truncated,
+                  })),
+                  atDepthEntries: cb.atDepthEntries?.map((e) => ({
+                    name: e.name,
+                    depth: e.depth,
+                    chars: e.chars,
+                  })),
                 }
               : undefined,
             promptProfile: pp
               ? {
                   name: pp.profileName ?? "unknown",
                   sourcePath: pp.sourcePath,
+                  totalChars: pp.promptChars,
                   modules: (pp.moduleEntries ?? []).map((m) => ({
                     name: m.name,
                     position: m.position,
+                    depth: m.depth,
                     chars: m.chars,
+                  })),
+                  atDepthModules: pp.atDepthEntries?.map((e) => ({
+                    name: e.name,
+                    depth: e.depth,
+                    chars: e.chars,
                   })),
                   streamParams: pp.streamParams,
                   toolScope: pp.toolPolicy,
                   preferredTools: pp.preferredTools,
-                  outputFormat: pp.outputPreferences?.format,
-                  replyTags: pp.outputPreferences?.replyTags,
+                  outputPreferences: pp.outputPreferences
+                    ? {
+                        format: pp.outputPreferences.format,
+                        sections: pp.outputPreferences.sections,
+                        style: pp.outputPreferences.style,
+                        rules: pp.outputPreferences.rules,
+                        requireFinalTag: pp.outputPreferences.requireFinalTag,
+                        replyTags: pp.outputPreferences.replyTags,
+                      }
+                    : undefined,
                 }
               : undefined,
           };

@@ -33,16 +33,31 @@ export type AssetContext = {
     usedChars?: number;
     matchedEntries: Array<{ name: string; position: string; chars: number }>;
     skippedEntries: string[];
+    bootstrapEntries?: Array<{
+      name: string;
+      rawChars: number;
+      injectedChars: number;
+      truncated: boolean;
+    }>;
+    atDepthEntries?: Array<{ name: string; depth: number; chars: number }>;
   };
   promptProfile?: {
     name: string;
     sourcePath?: string;
-    modules: Array<{ name: string; position: string; chars: number }>;
+    totalChars?: number;
+    modules: Array<{ name: string; position: string; depth?: number; chars: number }>;
+    atDepthModules?: Array<{ name: string; depth: number; chars: number }>;
     streamParams?: { temperature?: number; maxTokens?: number };
     toolScope?: { allow?: string[]; deny?: string[] };
     preferredTools?: string[];
-    outputFormat?: string;
-    replyTags?: string;
+    outputPreferences?: {
+      format?: string;
+      sections?: string[];
+      style?: string[];
+      rules?: string[];
+      requireFinalTag?: boolean;
+      replyTags?: string;
+    };
   };
 };
 
