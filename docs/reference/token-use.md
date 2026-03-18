@@ -42,7 +42,7 @@ Use `agents.defaults.imageMaxDimensionPx` (default: `1200`) to tune this:
 - Lower values usually reduce vision-token usage and payload size.
 - Higher values preserve more visual detail for OCR/UI-heavy screenshots.
 
-For a practical breakdown (per injected file, tools, skills, and system prompt size), use `/context list` or `/context detail`. See [Context](/concepts/context).
+For a practical breakdown of injected files, Context Books, Prompt Profiles, tools, skills, and overall system prompt size, use `/context list` or `/context detail`. See [Context](/concepts/context).
 
 ## How to see current token usage
 

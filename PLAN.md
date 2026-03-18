@@ -493,34 +493,101 @@ context_book_budget = available_budget × context_book_budget_percent
 
 ### P5：资产流通与导入导出
 
-**目标**：让 Agent Card / Context Book / Prompt Profile 成为真正可流通资产。
+**目标**：让 Agent Card / Context Book / Prompt Profile 成为真正可流通资产，通过 CLI 完成全生命周期管理。
 
-**内容**：
+#### P5.1：CLI 资产管理基础
 
-- import / export
-- 本地目录管理
-- UI 选择器
-- 版本字段
-- 兼容旧 workspace 文件自动生成初始资产
+**新增命令**：
+
+- `openclaw assets list` — 列出当前 workspace 所有资产（三类合并表格展示）
+  - 输出：类型 / 名称 / 文件名 / 状态（是否为当前默认）
+  - 支持 `--json` 输出
+  - 支持 `--type context-book|agent-card|prompt-profile` 过滤
+- `openclaw assets validate [file...]` — 校验资产文件 schema 合法性
+  - 无参数时校验当前 workspace 全部资产
+  - 报告：字段缺失、类型错误、未知字段警告
+
+**实现要点**：
+
+- 复用现有 `loadContextBookEntries()` / `loadAgentCardDocument()` / `loadPromptProfileDocuments()` 的解析逻辑
+- CLI 注册遵循 `register.*.ts` + lazy-loading 模式
+- 命令逻辑放 `src/commands/assets.ts`，CLI 接线放 `src/cli/program/register.assets.ts`
+
+#### P5.2：Export / Import
+
+**新增命令**：
+
+- `openclaw assets export <name> [--output path]` — 导出单个资产为独立文件
+  - 导出格式在原始 YAML/JSON 基础上追加元数据头：`_meta: { type, version, exportedAt, sourceAgent }`
+  - 默认输出到当前目录，文件名 = 资产名 + 类型后缀
+- `openclaw assets import <file> [--agent <id>]` — 导入资产到目标 workspace
+  - 自动识别资产类型（通过 `_meta.type` 或目录约定）
+  - 同名资产存在时提示覆盖确认（`--force` 跳过）
+  - 导入后自动运行 validate
+
+**导出格式示例**：
+
+```yaml
+_meta:
+  type: context-book
+  version: "1.0"
+  exportedAt: "2026-03-18T12:00:00Z"
+  sourceAgent: default
+
+# 原始资产内容
+name: "编程知识库"
+entries:
+  - name: "TypeScript 规范"
+    content: "..."
+    keywords: ["typescript", "ts"]
+```
+
+#### P5.3：旧 workspace 迁移
+
+**新增命令**：
+
+- `openclaw assets migrate [--dry-run]` — 从旧 bootstrap 文件生成资产
+  - 读取 `SOUL.md` → Agent Card `personality` / `tone`
+  - 读取 `IDENTITY.md` → Agent Card `identity`
+  - 读取 `USER.md` → Agent Card `user_relationship`
+  - `--dry-run` 预览生成内容，不写文件
+  - 已有 Agent Card 时跳过（不覆盖）
+
+#### P5.4：交互式选择器
+
+**新增命令**：
+
+- `openclaw context-book use [name]` — 设置默认 Context Book（类似现有 `profile use`）
+  - 无参数时交互选择
+  - 写入 `agent-card.yaml` 的 `default_context_book`
+- `openclaw assets switch` — 交互式切换当前 profile + context book 组合
+
+**依赖**：P5.1 + P5.2 完成后再做
 
 ## 当前推荐优先级
 
-### 第一轮
+### 第一轮（已完成）
 
-1. P0：记录基线
-2. P1：Context Book 基础版设计与最小实现
-3. 保留现有 A1 类清理项，作为 P1 的前置整理
-4. 保留工具描述增强 / 尾部提醒，作为 P4 的局部先行项
+1. ~~P0：记录基线~~
+2. ~~P1：Context Book 基础版~~
+3. ~~前置整理（bootstrap 清理）~~
 
-### 第二轮
+### 第二轮（已完成）
 
-1. P2：Agent Card
-2. P3：Prompt Profile
-3. P4：预算治理
+1. ~~P2：Agent Card~~
+2. ~~P3：Prompt Profile~~
+3. ~~P4：预算治理（核心部分）~~
 
-### 第三轮
+### 第三轮（进行中）
 
-1. P5：导入导出和前端资产管理
+1. P5.1：CLI 资产管理基础（`assets list` / `assets validate`）
+2. P5.2：Export / Import
+3. P5.3：旧 workspace 迁移
+4. P5.4：交互式选择器
+
+### 待定
+
+- P4 剩余：`cooldown`（需 session 持久化）、`excludeRecursion`（无真实需求）
 
 ## 关键文件清单
 

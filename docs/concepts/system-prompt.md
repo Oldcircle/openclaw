@@ -62,9 +62,15 @@ Bootstrap files are trimmed and appended under **Project Context** so the model 
 - `MEMORY.md` and/or `memory.md` (when present in the workspace; either or both may be injected)
 
 All of these files are **injected into the context window** on every turn, which
-means they consume tokens. Keep them concise — especially `MEMORY.md`, which can
+means they consume tokens. Keep them concise, especially `MEMORY.md`, which can
 grow over time and lead to unexpectedly high context usage and more frequent
 compaction.
+
+This bootstrap layer is also where newer asset-backed prompt features attach:
+
+- **Agent Card** can synthesize the legacy persona slots from `agent-card.{yaml,yml,json}` and can select a default Context Book and Prompt Profile for the workspace.
+- **Context Books** can add always-on entries to Project Context and can inject keyword-matched entries at runtime into `before_context`, `after_context`, `tail_reminder`, or `at_depth`.
+- **Prompt Profiles** can add reusable prompt modules, default stream params, tool preferences, output preferences, reply-tag policy, and final-tag requirements.
 
 > **Note:** `memory/*.md` daily files are **not** injected automatically. They
 > are accessed on demand via the `memory_search` and `memory_get` tools, so they
@@ -84,7 +90,9 @@ are filtered out to keep the sub-agent context small).
 Internal hooks can intercept this step via `agent:bootstrap` to mutate or replace
 the injected bootstrap files (for example swapping `SOUL.md` for an alternate persona).
 
-To inspect how much each injected file contributes (raw vs injected, truncation, plus tool schema overhead), use `/context list` or `/context detail`. See [Context](/concepts/context).
+To inspect how much each injected file contributes, plus Context Book usage, Prompt Profile modules, truncation, and tool schema overhead, use `/context list` or `/context detail`. See [Context](/concepts/context).
+
+If you want to switch the workspace default Prompt Profile from the CLI, use `openclaw profile use <name>`. This updates the workspace Agent Card and keeps runtime selection aligned with the same Prompt Profile loading rules used during prompt assembly.
 
 ## Time handling
 

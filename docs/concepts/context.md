@@ -23,7 +23,7 @@ Context is _not the same thing_ as “memory”: memory can be stored on disk an
 
 - `/status` → quick “how full is my window?” view + session settings.
 - `/context list` → what’s injected + rough sizes (per file + totals).
-- `/context detail` → deeper breakdown: per-file, per-tool schema sizes, per-skill entry sizes, and system prompt size.
+- `/context detail` → deeper breakdown: injected files, Context Book and Prompt Profile stats, per-tool schema sizes, per-skill entry sizes, and system prompt size.
 - `/usage tokens` → append per-reply usage footer to normal replies.
 - `/compact` → summarize older history into a compact entry to free window space.
 
@@ -65,6 +65,15 @@ Session tokens (cached): 14,250 total / ctx=32,000
 ```
 🧠 Context breakdown (detailed)
 …
+Context Books (Project Context): 2 entries / 1,240 chars (~310 tok)
+Last run Context Book prompt budget (25%): 2,000 chars (~500 tok) / used 640 chars (~160 tok)
+Last run matched Context Books: Research policy, Tail reminder
+Prompt Profile: Deep Think / 820 chars (~205 tok)
+Prompt Profile stream params: temperature=0.2, maxTokens=4096
+Prompt Profile tool scope: allow=group:web, read; deny=memory_get
+Prompt Profile output format: markdown
+Prompt Profile reply tags: current-only
+
 Top skills (prompt entry size):
 - frontend-design: 412 chars (~103 tok)
 - oracle: 401 chars (~101 tok)
@@ -102,7 +111,7 @@ Full breakdown: [System Prompt](/concepts/system-prompt).
 
 ## Injected workspace files (Project Context)
 
-By default, OpenClaw injects a fixed set of workspace files (if present):
+OpenClaw always starts from a bootstrap file layer when those files are present:
 
 - `AGENTS.md`
 - `SOUL.md`
@@ -112,9 +121,17 @@ By default, OpenClaw injects a fixed set of workspace files (if present):
 - `HEARTBEAT.md`
 - `BOOTSTRAP.md` (first-run only)
 
+That is only the base layer. Current workspaces can also add asset-driven prompt content:
+
+- **Agent Card** can synthesize persona content for the legacy `SOUL.md`, `IDENTITY.md`, and `USER.md` slots while staying backward-compatible with older workspaces.
+- **Context Books** can inject always-on or keyword-matched entries into Project Context or the prompt tail, and can also add `at_depth` reminders into the conversation history for a single run.
+- **Prompt Profiles** can inject reusable prompt modules, default model params, tool preferences, output preferences, reply-tag policy, and final-tag requirements.
+
 Large files are truncated per-file using `agents.defaults.bootstrapMaxChars` (default `20000` chars). OpenClaw also enforces a total bootstrap injection cap across files with `agents.defaults.bootstrapTotalMaxChars` (default `150000` chars). `/context` shows **raw vs injected** sizes and whether truncation happened.
 
 When truncation occurs, the runtime can inject an in-prompt warning block under Project Context. Configure this with `agents.defaults.bootstrapPromptTruncationWarning` (`off`, `once`, `always`; default `once`).
+
+When a run-built report is available, `/context detail` shows these layers separately. In addition to injected file sizes, it can report Context Book budget usage, matched entries, skipped entries, active Prompt Profile modules, tool scope, output preferences, reply-tag policy, and `at_depth` injections.
 
 ## Skills: what’s injected vs loaded on-demand
 
@@ -129,7 +146,7 @@ Tools affect context in two ways:
 1. **Tool list text** in the system prompt (what you see as “Tooling”).
 2. **Tool schemas** (JSON). These are sent to the model so it can call tools. They count toward context even though you don’t see them as plain text.
 
-`/context detail` breaks down the biggest tool schemas so you can see what dominates.
+`/context detail` breaks down the biggest tool schemas so you can see what dominates, but it also shows how much prompt budget is going to workspace files, Context Books, and Prompt Profiles.
 
 ## Commands, directives, and “inline shortcuts”
 
