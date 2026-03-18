@@ -47,7 +47,10 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
-import { resolveContextBookPromptContext } from "../../context-books.js";
+import {
+  calculateContextBookPromptMaxChars,
+  resolveContextBookPromptContext,
+} from "../../context-books.js";
 import { ensureCustomApiRegistered } from "../../custom-api-registry.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
@@ -2446,6 +2449,10 @@ export async function runEmbeddedAttempt(
           trigger: params.trigger,
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
         };
+        const effectiveStreamParams = mergePromptProfileStreamParams({
+          promptProfileStreamParams: systemPromptReport.promptProfiles?.streamParams,
+          streamParams: params.streamParams,
+        });
         const contextBookPromptContext = await resolveContextBookPromptContext({
           workspaceDir: params.workspaceDir,
           sessionKey: params.sessionKey,
@@ -2453,6 +2460,12 @@ export async function runEmbeddedAttempt(
           channelId: params.messageChannel ?? params.messageProvider ?? undefined,
           defaultContextBook: agentCardPromptContext.defaultContextBook,
           messages: activeSession.messages,
+          maxChars: calculateContextBookPromptMaxChars({
+            contextWindowTokens:
+              params.model.contextWindow ?? params.model.maxTokens ?? DEFAULT_CONTEXT_TOKENS,
+            maxOutputTokens: effectiveStreamParams?.maxTokens ?? params.model.maxTokens,
+            systemPromptChars: systemPromptReport.systemPrompt.chars,
+          }),
           warn: (message) => log.warn(`context-books: ${message}`),
         });
         const atDepthEntries = [
@@ -2482,6 +2495,9 @@ export async function runEmbeddedAttempt(
             depth: entry.depth,
             chars: entry.content.length,
           })),
+          promptBudgetChars: contextBookPromptContext.promptBudgetChars,
+          promptChars: contextBookPromptContext.promptChars,
+          skippedEntryNames: contextBookPromptContext.skippedEntryNames,
         };
         if (promptProfilePromptContext.profileName) {
           systemPromptReport.promptProfiles = {

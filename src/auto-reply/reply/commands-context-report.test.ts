@@ -65,6 +65,9 @@ function makeParams(
               ],
               matchedEntryNames: ["Research policy", "Tail reminder"],
               atDepthEntries: [{ name: "Tail reminder", depth: 2, chars: 55 }],
+              promptBudgetChars: 700,
+              promptChars: 350,
+              skippedEntryNames: ["Overflow note"],
             }
           : undefined,
         promptProfiles: options?.includePromptProfile
@@ -163,6 +166,10 @@ describe("buildContextReply", () => {
       }),
     );
     expect(result.text).toContain("Context Books (Project Context): 1 entries");
+    expect(result.text).toContain(
+      "Last run Context Book prompt budget: 700 chars (~175 tok) / used 350 chars (~88 tok)",
+    );
+    expect(result.text).toContain("Last run skipped Context Books (budget): Overflow note");
     expect(result.text).toContain("Last run matched Context Books: Research policy, Tail reminder");
     expect(result.text).toContain("Top Context Books (Project Context):");
     expect(result.text).toContain("Last run at_depth Context Books:");

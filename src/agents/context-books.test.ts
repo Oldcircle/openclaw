@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeTempWorkspace } from "../test-helpers/workspace.js";
 import {
+  calculateContextBookPromptMaxChars,
   CONTEXT_BOOKS_DIRNAME,
   loadContextBookBootstrapFiles,
   resolveContextBookPromptContext,
@@ -224,6 +225,9 @@ describe("loadContextBookBootstrapFiles", () => {
     expect(result.appendSystemContext).toContain("[Context Book: High priority]");
     expect(result.appendSystemContext).not.toContain("[Context Book: Low priority]");
     expect(result.matchedEntryNames).toEqual(["Must keep", "High priority"]);
+    expect(result.promptBudgetChars).toBe(80);
+    expect(result.promptChars).toBeGreaterThan(0);
+    expect(result.skippedEntryNames).toEqual(["Low priority"]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("prompt budget exceeded");
   });
@@ -570,5 +574,21 @@ describe("loadContextBookBootstrapFiles", () => {
 
     expect(preferredCount).toBeGreaterThan(rareCount);
     expect(preferredCount + rareCount).toBe(64);
+  });
+});
+
+describe("calculateContextBookPromptMaxChars", () => {
+  it("falls back to the legacy default when context window is unknown", () => {
+    expect(calculateContextBookPromptMaxChars({})).toBe(6_000);
+  });
+
+  it("derives a 25% prompt budget from remaining context headroom", () => {
+    expect(
+      calculateContextBookPromptMaxChars({
+        contextWindowTokens: 1_000,
+        maxOutputTokens: 200,
+        systemPromptChars: 400,
+      }),
+    ).toBe(700);
   });
 });

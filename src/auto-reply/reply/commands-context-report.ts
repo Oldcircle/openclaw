@@ -162,6 +162,14 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
   const contextBooksLine = contextBookProjectEntries.length
     ? `Context Books (Project Context): ${contextBookProjectEntries.length} entries / ${formatCharsAndTokens(report.contextBooks?.projectContextChars ?? 0)}`
     : "Context Books (Project Context): none";
+  const contextBookPromptBudgetLine =
+    report.contextBooks && typeof report.contextBooks.promptBudgetChars === "number"
+      ? `Last run Context Book prompt budget: ${formatCharsAndTokens(report.contextBooks.promptBudgetChars)} / used ${formatCharsAndTokens(report.contextBooks.promptChars ?? 0)}`
+      : undefined;
+  const contextBookSkippedLine =
+    report.contextBooks?.skippedEntryNames && report.contextBooks.skippedEntryNames.length > 0
+      ? `Last run skipped Context Books (budget): ${formatNameList(report.contextBooks.skippedEntryNames, 12)}`
+      : undefined;
   const contextBookMatchedLine = contextBookMatchedEntryNames.length
     ? `Last run matched Context Books: ${formatNameList(contextBookMatchedEntryNames, 12)}`
     : report.source === "run"
@@ -298,6 +306,8 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ...fileLines,
     "",
     contextBooksLine,
+    ...(contextBookPromptBudgetLine ? [contextBookPromptBudgetLine] : []),
+    ...(contextBookSkippedLine ? [contextBookSkippedLine] : []),
     ...(contextBookMatchedLine ? [contextBookMatchedLine] : []),
     ...(contextBookAtDepthLine ? [contextBookAtDepthLine] : []),
     "",

@@ -19,6 +19,8 @@ export const CONTEXT_BOOK_SYNTHETIC_NAME_PREFIX = "CONTEXT_BOOK:";
 const CONTEXT_BOOK_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const CONTEXT_BOOK_MAX_FILE_BYTES = 512 * 1024;
 const DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS = 6_000;
+const CONTEXT_BOOK_PROMPT_CONTEXT_SHARE = 0.25;
+const CONTEXT_BOOK_PROMPT_CHARS_PER_TOKEN_ESTIMATE = 4;
 const SUPPORTED_BOOTSTRAP_POSITIONS = new Set(["before_context", "after_context"]);
 const SUPPORTED_PROMPT_POSITIONS = new Set([
   "before_context",
@@ -69,6 +71,9 @@ export type ContextBookPromptContext = {
     depth: number;
   }>;
   matchedEntryNames: string[];
+  promptBudgetChars?: number;
+  promptChars?: number;
+  skippedEntryNames?: string[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -644,13 +649,19 @@ function selectPromptEntriesWithinBudget(params: {
   entries: NormalizedContextBookEntry[];
   maxChars: number;
   warn?: (message: string) => void;
-}): NormalizedContextBookEntry[] {
+}): {
+  selected: NormalizedContextBookEntry[];
+  maxChars: number;
+  usedChars: number;
+  skippedEntryNames: string[];
+} {
   const maxChars =
     typeof params.maxChars === "number" && Number.isFinite(params.maxChars) && params.maxChars > 0
       ? Math.floor(params.maxChars)
       : DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS;
   let remaining = maxChars;
   const selected: NormalizedContextBookEntry[] = [];
+  const skippedEntryNames: string[] = [];
 
   for (const entry of params.entries) {
     const rendered = formatPromptContextEntry(entry);
@@ -667,9 +678,48 @@ function selectPromptEntriesWithinBudget(params: {
     params.warn?.(
       `skipping context book entry "${entry.name}" - prompt budget exceeded (${maxChars} chars)`,
     );
+    skippedEntryNames.push(entry.name);
   }
 
-  return selected;
+  return {
+    selected,
+    maxChars,
+    usedChars: Math.max(0, maxChars - remaining),
+    skippedEntryNames,
+  };
+}
+
+export function calculateContextBookPromptMaxChars(params: {
+  contextWindowTokens?: number;
+  maxOutputTokens?: number;
+  systemPromptChars?: number;
+}): number {
+  const contextWindowTokens =
+    typeof params.contextWindowTokens === "number" &&
+    Number.isFinite(params.contextWindowTokens) &&
+    params.contextWindowTokens > 0
+      ? Math.floor(params.contextWindowTokens)
+      : 0;
+  if (contextWindowTokens <= 0) {
+    return DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS;
+  }
+
+  const maxOutputTokens =
+    typeof params.maxOutputTokens === "number" &&
+    Number.isFinite(params.maxOutputTokens) &&
+    params.maxOutputTokens > 0
+      ? Math.floor(params.maxOutputTokens)
+      : 0;
+  const systemPromptChars =
+    typeof params.systemPromptChars === "number" &&
+    Number.isFinite(params.systemPromptChars) &&
+    params.systemPromptChars > 0
+      ? Math.floor(params.systemPromptChars)
+      : 0;
+  const totalChars = contextWindowTokens * CONTEXT_BOOK_PROMPT_CHARS_PER_TOKEN_ESTIMATE;
+  const reservedOutputChars = maxOutputTokens * CONTEXT_BOOK_PROMPT_CHARS_PER_TOKEN_ESTIMATE;
+  const availableChars = Math.max(0, totalChars - reservedOutputChars - systemPromptChars);
+  return Math.max(0, Math.floor(availableChars * CONTEXT_BOOK_PROMPT_CONTEXT_SHARE));
 }
 
 export async function loadContextBookBootstrapFiles(params: {
@@ -760,13 +810,20 @@ export async function resolveContextBookPromptContext(params: {
     haystack,
     phase: "prompt",
   });
-  const matched = selectPromptEntriesWithinBudget({
+  const budgeted = selectPromptEntriesWithinBudget({
     entries: groupedMatchedEntries,
     maxChars: params.maxChars ?? DEFAULT_CONTEXT_BOOK_PROMPT_MAX_CHARS,
     warn: params.warn,
   });
+  const matched = budgeted.selected;
   if (matched.length === 0) {
-    return { atDepthEntries: [], matchedEntryNames: [] };
+    return {
+      atDepthEntries: [],
+      matchedEntryNames: [],
+      promptBudgetChars: budgeted.maxChars,
+      promptChars: budgeted.usedChars,
+      skippedEntryNames: budgeted.skippedEntryNames,
+    };
   }
 
   const prependSystemContext = joinPresentTextSegments(
@@ -784,5 +841,8 @@ export async function resolveContextBookPromptContext(params: {
     appendSystemContext,
     atDepthEntries: buildAtDepthEntries(matched),
     matchedEntryNames: matched.map((entry) => entry.name),
+    promptBudgetChars: budgeted.maxChars,
+    promptChars: budgeted.usedChars,
+    skippedEntryNames: budgeted.skippedEntryNames,
   };
 }

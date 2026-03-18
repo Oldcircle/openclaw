@@ -18,7 +18,7 @@
 | P1   | Context Book 基础版    | 已完成 | 全部 schema 字段已落地，3/17 真实 Gateway 验证通过（常驻注入 + 关键词触发 + tail_reminder + `/context detail` 统计）          |
 | P2   | Agent Card 基础版      | 已完成 | 3/17 真实 Gateway 验证通过（persona 替代 + depth_prompt）；`default_context_book` / `default_prompt_profile` 默认挂载均已接通 |
 | P3   | Prompt Profile 基础版  | 已完成 | 模块注入 + 模型参数 + 工具范围/偏好 + 输出偏好 + final-tag + reply-tags + `openclaw profile use` CLI                          |
-| P4   | 高级预算治理与深度注入 | 未开始 | `at_depth`、更细粒度预算、sticky/cooldown 等高级能力                                                                          |
+| P4   | 高级预算治理与深度注入 | 进行中 | 已启动第一步：Context Book prompt budget 动态计算 + `/context detail` 预算可观测；sticky/cooldown 等后续继续推进              |
 | P5   | 资产导入导出           | 未开始 | import/export/UI 选择器                                                                                                       |
 
 ## 当前待办
@@ -87,6 +87,16 @@
 - **已继续推进**：
   - Prompt Profile position 解析现在兼容上述概念层别名，并在运行时归一化到现有 schema
   - 文档已改成“概念层名称 + 运行时映射”的写法，避免误导后续配置
+
+### 3/17: P4 起步 - Context Book prompt budget 进入运行时与 `/context detail`
+
+- **P4 开始落地**：
+  - Context Book prompt budget 不再只是 `resolveContextBookPromptContext()` 里的隐藏常量；运行时现在会按模型上下文窗口、max output tokens 和当前 system prompt 体积动态计算 prompt budget
+  - `systemPromptReport.contextBooks` 新增 prompt budget / used chars / skipped entries 字段
+  - `/context detail` 已显示 Context Book prompt budget、已使用体积，以及因预算超限被跳过的条目
+- **本地验证通过**：
+  - `pnpm exec vitest run src/agents/context-books.test.ts src/auto-reply/reply/commands-context-report.test.ts src/agents/system-prompt-report.test.ts`
+  - `pnpm exec vitest run src/agents/pi-embedded-runner/run/attempt.test.ts src/agents/context-books.test.ts src/auto-reply/reply/commands-context-report.test.ts src/agents/prompt-profiles.test.ts`
 
 ### 3/17: 真实 Gateway 端到端验证 + Prompt Profile 工具偏好 / 输出偏好 / final-tag + bugfix
 

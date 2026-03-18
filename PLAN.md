@@ -478,6 +478,11 @@ context_book_budget = available_budget × context_book_budget_percent
 - Context Book 预算溢出时在日志中警告
 - 长会话关键规则回钉（sticky 机制确保重要规则在窗口内持续存在）
 
+**当前已开始（2026-03-17）**：
+
+- Context Book prompt budget 已接入运行时计算：基于模型 context window、max output tokens 和当前 system prompt 体积动态求得
+- `/context detail` 已开始显示 Context Book prompt budget、已使用 chars，以及被预算跳过的条目
+
 ---
 
 ### P5：资产流通与导入导出
