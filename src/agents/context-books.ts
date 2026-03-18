@@ -258,7 +258,7 @@ function matchesSelectedContextBook(fileName: string, selectedContextBook: strin
 }
 
 function formatPromptContextEntry(entry: NormalizedContextBookEntry): string {
-  return [`[Context Book: ${entry.name}]`, entry.content].join("\n");
+  return [`## Context Book: ${entry.name}`, entry.content].join("\n");
 }
 
 function extractEntries(

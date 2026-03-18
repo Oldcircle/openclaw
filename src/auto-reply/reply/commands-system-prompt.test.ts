@@ -66,7 +66,7 @@ describe("resolveCommandsSystemPromptBundle", () => {
       allow: ["group:web", "read"],
     });
     expect(result.promptProfileContext.outputPreferences?.replyTags).toBe("off");
-    expect(result.systemPrompt).toContain("[Prompt Profile: Tooling / Tool Preferences]");
+    expect(result.systemPrompt).toContain("## Prompt Profile: Tooling / Tool Preferences");
     expect(result.systemPrompt).toContain(
       "Prefer these tools or tool groups when relevant: web_search",
     );

@@ -86,11 +86,13 @@ describe("resolvePromptProfilePromptContext", () => {
       replyTags: "current_only",
       rules: ["Include a recommendation at the end.", "Call out blockers explicitly."],
     });
-    expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Analysis frame]");
-    expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Final answer]");
-    expect(result.appendSystemContext).toContain("[Prompt Profile: Deep Think / Tool Preferences]");
+    expect(result.appendSystemContext).toContain("## Prompt Profile: Deep Think / Analysis frame");
+    expect(result.appendSystemContext).toContain("## Prompt Profile: Deep Think / Final answer");
     expect(result.appendSystemContext).toContain(
-      "[Prompt Profile: Deep Think / Output Preferences]",
+      "## Prompt Profile: Deep Think / Tool Preferences",
+    );
+    expect(result.appendSystemContext).toContain(
+      "## Prompt Profile: Deep Think / Output Preferences",
     );
     expect(result.appendSystemContext).toContain(
       "Prefer these tools or tool groups when relevant: web_search, group:web",
@@ -111,7 +113,7 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.atDepthEntries).toEqual([
       {
         name: "Deep Think / Mid-history reminder",
-        content: "[Prompt Profile: Deep Think / Mid-history reminder]\nKeep tradeoffs visible.",
+        content: "## Prompt Profile: Deep Think / Mid-history reminder\nKeep tradeoffs visible.",
         depth: 2,
       },
     ]);
@@ -159,7 +161,7 @@ describe("resolvePromptProfilePromptContext", () => {
     expect(result.toolPolicy).toEqual({ allow: ["group:web"] });
     expect(result.preferredTools).toEqual(["web_search"]);
     expect(result.matchedModuleNames).toEqual([]);
-    expect(result.appendSystemContext).toContain("[Prompt Profile: Tooling / Tool Preferences]");
+    expect(result.appendSystemContext).toContain("## Prompt Profile: Tooling / Tool Preferences");
   });
 
   it("supports output preferences without prompt modules", async () => {
@@ -197,7 +199,7 @@ describe("resolvePromptProfilePromptContext", () => {
       rules: ["Return valid JSON only."],
     });
     expect(result.appendSystemContext).toContain(
-      "[Prompt Profile: Formatting / Output Preferences]",
+      "## Prompt Profile: Formatting / Output Preferences",
     );
     expect(result.appendSystemContext).toContain("Preferred output format: json");
     expect(result.appendSystemContext).toContain(
@@ -235,11 +237,11 @@ describe("resolvePromptProfilePromptContext", () => {
       defaultPromptProfile: "alias-positions",
     });
 
-    expect(result.prependSystemContext).toContain("[Prompt Profile: alias-positions / Head note]");
+    expect(result.prependSystemContext).toContain("## Prompt Profile: alias-positions / Head note");
     expect(result.appendSystemContext).toContain(
-      "[Prompt Profile: alias-positions / After history note]",
+      "## Prompt Profile: alias-positions / After history note",
     );
-    expect(result.appendSystemContext).toContain("[Prompt Profile: alias-positions / Tail note]");
+    expect(result.appendSystemContext).toContain("## Prompt Profile: alias-positions / Tail note");
     expect(result.moduleEntries).toEqual([
       expect.objectContaining({
         name: "Head note",

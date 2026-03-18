@@ -489,7 +489,7 @@ function formatPromptProfileModule(params: {
   moduleName: string;
   content: string;
 }): string {
-  return [`[Prompt Profile: ${params.profileName} / ${params.moduleName}]`, params.content].join(
+  return [`## Prompt Profile: ${params.profileName} / ${params.moduleName}`, params.content].join(
     "\n",
   );
 }
@@ -523,7 +523,7 @@ function buildPromptProfileToolPreferencesSection(params: {
   }
 
   return [
-    `[Prompt Profile: ${params.profileName} / Tool Preferences]`,
+    `## Prompt Profile: ${params.profileName} / Tool Preferences`,
     `Prefer these tools or tool groups when relevant: ${params.preferredTools.join(", ")}`,
   ].join("\n");
 }
@@ -554,7 +554,7 @@ function buildPromptProfileOutputPreferencesSection(params: {
           : "";
 
   const lines = [
-    `[Prompt Profile: ${params.profileName} / Output Preferences]`,
+    `## Prompt Profile: ${params.profileName} / Output Preferences`,
     preferences.format ? `Preferred output format: ${preferences.format}` : "",
     preferences.sections.length > 0 ? `Preferred sections: ${preferences.sections.join(", ")}` : "",
     preferences.style.length > 0 ? `Preferred style: ${preferences.style.join(", ")}` : "",

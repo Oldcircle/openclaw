@@ -90,7 +90,7 @@ describe("loadContextBookBootstrapFiles", () => {
 
     expect(result.prependSystemContext).toBeUndefined();
     expect(result.atDepthEntries).toEqual([]);
-    expect(result.appendSystemContext).toContain("[Context Book: Tail reminder]");
+    expect(result.appendSystemContext).toContain("## Context Book: Tail reminder");
     expect(result.appendSystemContext).toContain("do the thing");
     expect(result.appendSystemContext).not.toContain("always injected elsewhere");
     expect(result.matchedEntryNames).toEqual(["Tail reminder"]);
@@ -127,11 +127,11 @@ describe("loadContextBookBootstrapFiles", () => {
     });
 
     expect(result.prependSystemContext).toBeUndefined();
-    expect(result.appendSystemContext).toContain("[Context Book: Tail reminder]");
+    expect(result.appendSystemContext).toContain("## Context Book: Tail reminder");
     expect(result.atDepthEntries).toEqual([
       {
         name: "Mid-history reminder",
-        content: "[Context Book: Mid-history reminder]\nremember prior architectural decisions",
+        content: "## Context Book: Mid-history reminder\nremember prior architectural decisions",
         depth: 2,
       },
     ]);
@@ -175,8 +175,8 @@ describe("loadContextBookBootstrapFiles", () => {
       messages: [{ role: "user", content: "vite build issue" }],
     });
 
-    expect(result.appendSystemContext).toContain("[Context Book: Coding helper]");
-    expect(result.appendSystemContext).not.toContain("[Context Book: Research helper]");
+    expect(result.appendSystemContext).toContain("## Context Book: Coding helper");
+    expect(result.appendSystemContext).not.toContain("## Context Book: Research helper");
     expect(result.matchedEntryNames).toEqual(["Coding helper"]);
   });
 
@@ -222,9 +222,9 @@ describe("loadContextBookBootstrapFiles", () => {
       warn: (message) => warnings.push(message),
     });
 
-    expect(result.appendSystemContext).toContain("[Context Book: Must keep]");
-    expect(result.appendSystemContext).toContain("[Context Book: High priority]");
-    expect(result.appendSystemContext).not.toContain("[Context Book: Low priority]");
+    expect(result.appendSystemContext).toContain("## Context Book: Must keep");
+    expect(result.appendSystemContext).toContain("## Context Book: High priority");
+    expect(result.appendSystemContext).not.toContain("## Context Book: Low priority");
     expect(result.matchedEntryNames).toEqual(["Must keep", "High priority"]);
     expect(result.promptBudgetChars).toBe(80);
     expect(result.promptChars).toBeGreaterThan(0);
@@ -297,10 +297,10 @@ describe("loadContextBookBootstrapFiles", () => {
     });
 
     const appended = result.appendSystemContext ?? "";
-    expect(appended).toContain("[Context Book: Background note]");
-    expect(appended).toContain("[Context Book: Final reminder]");
-    expect(appended.indexOf("[Context Book: Background note]")).toBeLessThan(
-      appended.indexOf("[Context Book: Final reminder]"),
+    expect(appended).toContain("## Context Book: Background note");
+    expect(appended).toContain("## Context Book: Final reminder");
+    expect(appended.indexOf("## Context Book: Background note")).toBeLessThan(
+      appended.indexOf("## Context Book: Final reminder"),
     );
   });
 
@@ -340,8 +340,8 @@ describe("loadContextBookBootstrapFiles", () => {
       channelId: "telegram",
     });
 
-    expect(result.appendSystemContext).toContain("[Context Book: Telegram main default]");
-    expect(result.appendSystemContext).not.toContain("[Context Book: Discord only]");
+    expect(result.appendSystemContext).toContain("## Context Book: Telegram main default");
+    expect(result.appendSystemContext).not.toContain("## Context Book: Discord only");
     expect(result.matchedEntryNames).toEqual(["Telegram main default"]);
   });
 
@@ -414,15 +414,15 @@ describe("loadContextBookBootstrapFiles", () => {
       workspaceDir,
       messages: [{ role: "user", content: "vite config problem in build pipeline" }],
     });
-    expect(matched.appendSystemContext).toContain("[Context Book: Vite config helper]");
-    expect(matched.appendSystemContext).toContain("[Context Book: Vite no test helper]");
+    expect(matched.appendSystemContext).toContain("## Context Book: Vite config helper");
+    expect(matched.appendSystemContext).toContain("## Context Book: Vite no test helper");
 
     const excluded = await resolveContextBookPromptContext({
       workspaceDir,
       messages: [{ role: "user", content: "vite test config issue" }],
     });
-    expect(excluded.appendSystemContext).toContain("[Context Book: Vite config helper]");
-    expect(excluded.appendSystemContext).not.toContain("[Context Book: Vite no test helper]");
+    expect(excluded.appendSystemContext).toContain("## Context Book: Vite config helper");
+    expect(excluded.appendSystemContext).not.toContain("## Context Book: Vite no test helper");
   });
 
   it("filters prompt context by chat type", async () => {
@@ -456,16 +456,16 @@ describe("loadContextBookBootstrapFiles", () => {
       sessionKey: "agent:main:telegram:group:team-room",
       messages: [{ role: "user", content: "vite issue" }],
     });
-    expect(groupResult.appendSystemContext).toContain("[Context Book: Group helper]");
-    expect(groupResult.appendSystemContext).not.toContain("[Context Book: Direct helper]");
+    expect(groupResult.appendSystemContext).toContain("## Context Book: Group helper");
+    expect(groupResult.appendSystemContext).not.toContain("## Context Book: Direct helper");
 
     const directResult = await resolveContextBookPromptContext({
       workspaceDir,
       sessionKey: "agent:main:direct:user-1",
       messages: [{ role: "user", content: "vite issue" }],
     });
-    expect(directResult.appendSystemContext).toContain("[Context Book: Direct helper]");
-    expect(directResult.appendSystemContext).not.toContain("[Context Book: Group helper]");
+    expect(directResult.appendSystemContext).toContain("## Context Book: Direct helper");
+    expect(directResult.appendSystemContext).not.toContain("## Context Book: Group helper");
   });
 
   it("keeps only one matched entry from the same group", async () => {
@@ -508,10 +508,10 @@ describe("loadContextBookBootstrapFiles", () => {
 
     const appended = result.appendSystemContext ?? "";
     const groupedMatches = ["React specialist", "Vue specialist"].filter((name) =>
-      appended.includes(`[Context Book: ${name}]`),
+      appended.includes(`## Context Book: ${name}`),
     );
     expect(groupedMatches).toHaveLength(1);
-    expect(appended).toContain("[Context Book: Shared helper]");
+    expect(appended).toContain("## Context Book: Shared helper");
     expect(result.matchedEntryNames).toHaveLength(2);
   });
 
@@ -646,14 +646,14 @@ describe("loadContextBookBootstrapFiles", () => {
 
     const appended = result.appendSystemContext ?? "";
     // The capped entry should have truncated content (50 chars of "x")
-    expect(appended).toContain("[Context Book: Capped entry]");
-    expect(appended).toContain("[Context Book: Uncapped entry]");
+    expect(appended).toContain("## Context Book: Capped entry");
+    expect(appended).toContain("## Context Book: Uncapped entry");
     // Capped entry's x-run should be exactly 50 chars
-    const cappedMatch = appended.match(/\[Context Book: Capped entry\]\n(x+)/);
+    const cappedMatch = appended.match(/## Context Book: Capped entry\n(x+)/);
     expect(cappedMatch).toBeTruthy();
     expect(cappedMatch![1].length).toBe(50);
     // Uncapped entry's x-run should be full 500 chars
-    const uncappedMatch = appended.match(/\[Context Book: Uncapped entry\]\n(x+)/);
+    const uncappedMatch = appended.match(/## Context Book: Uncapped entry\n(x+)/);
     expect(uncappedMatch).toBeTruthy();
     expect(uncappedMatch![1].length).toBe(500);
   });

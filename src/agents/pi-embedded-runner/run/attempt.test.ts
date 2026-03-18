@@ -143,8 +143,8 @@ describe("at-depth context book message helpers", () => {
         { role: "user", content: "third", timestamp: 3 },
       ] as never,
       entries: [
-        { name: "Depth zero", content: "[Context Book: Depth zero]\nzero", depth: 0 },
-        { name: "Depth two", content: "[Context Book: Depth two]\ntwo", depth: 2 },
+        { name: "Depth zero", content: "## Context Book: Depth zero\nzero", depth: 0 },
+        { name: "Depth two", content: "## Context Book: Depth two\ntwo", depth: 2 },
       ],
     });
 
@@ -165,7 +165,7 @@ describe("at-depth context book message helpers", () => {
         { role: "user", content: "first", timestamp: 1 },
         { role: "assistant", content: "second", timestamp: 2 },
       ] as never,
-      entries: [{ name: "Depth one", content: "[Context Book: Depth one]\none", depth: 1 }],
+      entries: [{ name: "Depth one", content: "## Context Book: Depth one\none", depth: 1 }],
     });
 
     expect(stripAtDepthContextBookMessages(injected)).toEqual([
