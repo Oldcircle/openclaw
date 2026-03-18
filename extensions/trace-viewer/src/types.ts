@@ -16,6 +16,8 @@ export type PromptSectionCategory =
   | "skills"
   | "messaging"
   | "memory"
+  | "context-book"
+  | "prompt-profile"
   | "system";
 
 export type PromptSection = {
