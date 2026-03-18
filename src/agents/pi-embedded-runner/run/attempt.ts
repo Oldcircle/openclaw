@@ -2454,7 +2454,7 @@ export async function runEmbeddedAttempt(
           promptProfileStreamParams: systemPromptReport.promptProfiles?.streamParams,
           streamParams: params.streamParams,
         });
-        const contextBookPromptBudgetPercent = resolveContextBookPromptBudgetPercent(params.cfg);
+        const contextBookPromptBudgetPercent = resolveContextBookPromptBudgetPercent(params.config);
         const contextBookPromptContext = await resolveContextBookPromptContext({
           workspaceDir: params.workspaceDir,
           sessionKey: params.sessionKey,
