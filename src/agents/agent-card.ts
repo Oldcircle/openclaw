@@ -160,15 +160,15 @@ function buildSoulSection(card: RawAgentCard, sourcePath: string): WorkspaceBoot
   const { defaultContextBook, defaultPromptProfile } = extractAgentCardDefaults(card);
   const lines = [
     "# SOUL.md - Agent Card",
-    personality ? ["## Personality", personality, ""].join("\n") : "",
-    tone ? ["## Tone", tone, ""].join("\n") : "",
+    personality ? ["### Personality", personality, ""].join("\n") : "",
+    tone ? ["### Tone", tone, ""].join("\n") : "",
     behaviorNotes.length
-      ? ["## Behavior Notes", ...behaviorNotes.map((note) => `- ${note}`), ""].join("\n")
+      ? ["### Behavior Notes", ...behaviorNotes.map((note) => `- ${note}`), ""].join("\n")
       : "",
-    exampleDialogues ? ["## Example Dialogues", exampleDialogues, ""].join("\n") : "",
+    exampleDialogues ? ["### Example Dialogues", exampleDialogues, ""].join("\n") : "",
     defaultContextBook || defaultPromptProfile
       ? [
-          "## Defaults",
+          "### Defaults",
           defaultContextBook ? `- Context Book: ${defaultContextBook}` : "",
           defaultPromptProfile ? `- Prompt Profile: ${defaultPromptProfile}` : "",
           "",
@@ -216,7 +216,7 @@ function buildDepthPromptEntry(
   const cardName = resolveAgentCardName(card, sourcePath);
   return {
     name: `${cardName} depth_prompt`,
-    content: [`[Agent Card Depth Prompt: ${cardName}]`, content].join("\n"),
+    content: [`## Agent Card Depth Prompt: ${cardName}`, content].join("\n"),
     depth: parseDepth(card.depth_prompt.depth),
   };
 }

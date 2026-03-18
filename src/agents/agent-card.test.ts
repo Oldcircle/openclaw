@@ -28,7 +28,7 @@ describe("resolveAgentCardPromptContext", () => {
     expect(result.atDepthEntries).toEqual([
       {
         name: "Researcher depth_prompt",
-        content: "[Agent Card Depth Prompt: Researcher]\nAlways compare options before deciding.",
+        content: "## Agent Card Depth Prompt: Researcher\nAlways compare options before deciding.",
         depth: 2,
       },
     ]);
