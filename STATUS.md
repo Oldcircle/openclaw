@@ -78,6 +78,27 @@
 
 ## 最新进展（2026-03-18）
 
+### 3/18: trace-viewer 资产集成全链路完成（Phase A+B+C + 注入格式修复）
+
+- **Phase A**：`llm_input` hook payload 新增 `assetContext` 字段（`PluginHookAssetContext` 类型）
+  - 包含 Agent Card 默认挂载、Context Book 命中/跳过/常驻/at_depth 条目、Prompt Profile 模块/参数/工具范围/输出偏好
+  - 只在第一轮 `llm_input` 附带，后续轮次不重复
+  - 通过 `resolveAssetContext` 回调从 `systemPromptReport` 构建
+- **Phase B**：collector 消费 `assetContext`
+  - `LlmInputStep` 保存 `assetContext`
+  - `TraceSummary` 新增 `activeAssets` 摘要
+  - 恢复 `context-book` / `prompt-profile` section 分类
+- **Phase C**：viewer 前端展示
+  - `AssetContextPanel` 组件：所有条目可点击展开侧边栏，显示注入位置说明
+  - Context Book 预算进度条
+  - `PromptStructure` 交叉标注资产来源（Agent Card / CB 标签）
+  - 列表页显示 Profile 名称 + CB 命中数
+  - 诊断面板新增预算告警规则
+- **注入格式修复**：`[Context Book: xxx]` / `[Prompt Profile: xxx]` 改为 `## Context Book: xxx` / `## Prompt Profile: xxx`
+  - 原格式用方括号标记，collector 按 `## ` 切块时资产内容被吞进相邻 section
+  - 改为 `## ` 标题后，每个资产条目在 System Prompt 结构图中独立可见
+  - 106 个相关测试全部通过
+
 ### 3/18: P5.3 + P5.4 完成 — 旧 workspace 迁移 + Context Book 选择器
 
 - **`openclaw assets migrate`**：
