@@ -31,16 +31,16 @@
 
 > 核心思路：经验不是新的资产类型，而是 Context Book 的自动化层。触发时机复用已有的 session-memory hook 和用户主动指令。
 
-| 步骤 | 内容                                                              | 状态   | 备注              |
-| ---- | ----------------------------------------------------------------- | ------ | ----------------- |
-| E1   | Context Book schema 扩展（source/confidence/hitCount 等可选字段） | 待开始 |                   |
-| E2   | session-memory hook 扩展（/new 时顺便提取经验）                   | 待开始 | 核心创建流程      |
-| E3   | 经验命中追踪（llm_input hook 更新 hitCount）                      | 待开始 | 复用 assetContext |
-| E6   | 用户主动触发（"记录一下"/"整理笔记"）                             | 待开始 |                   |
-| E4   | 置信度演进（low→medium→high→proven + 降级废弃）                   | 待开始 |                   |
-| E5   | 经验内容更新（命中但仍被纠正时补充 conclusion）                   | 待开始 |                   |
+| 步骤 | 内容                                                              | 状态   | 备注                                                                                     |
+| ---- | ----------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| E1   | Context Book schema 扩展（source/confidence/hitCount 等可选字段） | 已完成 | 类型 + 解析 + 校验 + deprecated 跳过                                                     |
+| E2   | session-memory hook 扩展（/new 时顺便提取经验）                   | 已完成 | experience-extractor.ts + handler.ts 集成；position 改 tail_reminder；内容强化命令式语气 |
+| E3   | 经验命中追踪（命中时更新 hitCount/lastHitAt）                     | 已完成 | resolveContextBookPromptContext 中 fire-and-forget 回写 learned.yaml                     |
+| E6   | 用户主动触发（"记录一下"/"整理笔记"）                             | 待开始 |                                                                                          |
+| E4   | 置信度演进（low→medium→high→proven + 降级废弃）                   | 待开始 |                                                                                          |
+| E5   | 经验内容更新（命中但仍被纠正时补充 conclusion）                   | 待开始 |                                                                                          |
 
-**实施顺序**：E1 → E2 → E3 → E6 → E4 → E5
+**实施顺序**：~~E1~~ → ~~E2~~ → ~~E3~~ → E6 → E4 → E5
 
 ## 资产化提示词系统进度
 
@@ -109,6 +109,19 @@
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
 ## 最新进展（2026-03-19）
+
+### 3/19: 经验触发修复 + E3 hitCount 追踪
+
+- **问题**：天气经验资产被正确创建并注入 prompt，但 deepseek-chat 不遵守（仍询问城市）
+- **修复 1 — 注入位置**：经验条目从 `after_context`（中段）改为 `tail_reminder`（尾部提醒），模型遵从度更高
+- **修复 2 — 内容格式**：
+  - LLM 提取 prompt 新增命令式语气要求（MUST/ALWAYS/NEVER）
+  - 内容自动添加 `[经验规则]` 前缀标签
+- **修复 3 — E3 hitCount 追踪**：
+  - `resolveContextBookPromptContext()` 命中 `source: auto` 条目后，fire-and-forget 更新 `learned.yaml` 的 `hitCount` 和 `lastHitAt`
+  - 使用文本正则替换，保留原 YAML 格式和注释
+- **已有 learned.yaml 修正**：合并重复的天气条目，改为 tail_reminder + 命令式内容
+- 修改文件：`src/agents/context-books.ts`、`src/hooks/bundled/session-memory/experience-extractor.ts`
 
 ### 3/19: 第二阶段提示词精简 S1-S4 完成
 

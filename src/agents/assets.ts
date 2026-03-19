@@ -604,6 +604,68 @@ function validateContextBookEntry(
     });
   }
 
+  // Experience asset fields
+  if (e.source !== undefined && e.source !== "manual" && e.source !== "auto") {
+    issues.push({
+      type,
+      fileName,
+      filePath,
+      level: "error",
+      message: `entry #${index + 1}: source must be "manual" or "auto"`,
+    });
+  }
+  if (e.confidence !== undefined && typeof e.confidence === "string") {
+    const validConfidence = new Set(["low", "medium", "high", "proven", "deprecated"]);
+    if (!validConfidence.has(e.confidence)) {
+      issues.push({
+        type,
+        fileName,
+        filePath,
+        level: "warning",
+        message: `entry #${index + 1}: unknown confidence "${e.confidence}"`,
+      });
+    }
+  }
+  if (
+    e.hitCount !== undefined &&
+    (typeof e.hitCount !== "number" || !Number.isFinite(e.hitCount))
+  ) {
+    issues.push({
+      type,
+      fileName,
+      filePath,
+      level: "error",
+      message: `entry #${index + 1}: hitCount must be a number`,
+    });
+  }
+  if (e.lastHitAt !== undefined && typeof e.lastHitAt !== "string") {
+    issues.push({
+      type,
+      fileName,
+      filePath,
+      level: "error",
+      message: `entry #${index + 1}: lastHitAt must be a string`,
+    });
+  }
+  if (e.sourceSession !== undefined && typeof e.sourceSession !== "string") {
+    issues.push({
+      type,
+      fileName,
+      filePath,
+      level: "error",
+      message: `entry #${index + 1}: sourceSession must be a string`,
+    });
+  }
+  if (e.situation !== undefined && typeof e.situation !== "string") {
+    issues.push({
+      type,
+      fileName,
+      filePath,
+      level: "error",
+      message: `entry #${index + 1}: situation must be a string`,
+    });
+  }
+
   return issues;
 }
 

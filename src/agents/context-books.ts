@@ -41,6 +41,9 @@ type RawContextBookDocument =
     }
   | unknown[];
 
+type ContextBookEntrySource = "manual" | "auto";
+type ContextBookEntryConfidence = "low" | "medium" | "high" | "proven" | "deprecated";
+
 type NormalizedContextBookEntry = {
   name: string;
   syntheticName: string;
@@ -66,6 +69,13 @@ type NormalizedContextBookEntry = {
   tokenBudget: number;
   sticky: number;
   delay: number;
+  // Experience asset fields (optional, used by memory-enhance plugin)
+  source: ContextBookEntrySource;
+  sourceSession: string;
+  confidence: ContextBookEntryConfidence | "";
+  hitCount: number;
+  lastHitAt: string;
+  situation: string;
 };
 
 export type ContextBookPromptContext = {
@@ -133,6 +143,14 @@ function parseDelay(value: unknown): number {
     return 0;
   }
   return Math.floor(value);
+}
+
+const VALID_CONFIDENCE_VALUES = new Set(["low", "medium", "high", "proven", "deprecated"]);
+function parseConfidence(value: unknown): ContextBookEntryConfidence | "" {
+  if (typeof value === "string" && VALID_CONFIDENCE_VALUES.has(value)) {
+    return value as ContextBookEntryConfidence;
+  }
+  return "";
 }
 
 // Estimate the current conversation turn count from the message array.
@@ -297,6 +315,9 @@ function extractEntries(
     if (!enabled || (!alwaysActive && keywords.length === 0)) {
       continue;
     }
+    if (rawEntry.confidence === "deprecated") {
+      continue;
+    }
 
     const content = typeof rawEntry.content === "string" ? rawEntry.content.trim() : "";
     if (!content) {
@@ -338,6 +359,15 @@ function extractEntries(
       tokenBudget: parseTokenBudget(rawEntry.tokenBudget),
       sticky: parseSticky(rawEntry.sticky),
       delay: parseDelay(rawEntry.delay),
+      source: rawEntry.source === "auto" ? "auto" : "manual",
+      sourceSession: typeof rawEntry.sourceSession === "string" ? rawEntry.sourceSession : "",
+      confidence: parseConfidence(rawEntry.confidence),
+      hitCount:
+        typeof rawEntry.hitCount === "number" && Number.isFinite(rawEntry.hitCount)
+          ? Math.max(0, Math.floor(rawEntry.hitCount))
+          : 0,
+      lastHitAt: typeof rawEntry.lastHitAt === "string" ? rawEntry.lastHitAt : "",
+      situation: typeof rawEntry.situation === "string" ? rawEntry.situation.trim() : "",
     });
   }
 
@@ -427,8 +457,14 @@ async function loadContextBookEntries(params: {
     .toSorted((a, b) => a.localeCompare(b));
   const defaultContextBook = params.defaultContextBook?.trim();
 
+  // Always load learned.yaml (auto-generated experience entries) regardless of defaultContextBook filter.
+  const ALWAYS_LOAD_FILES = new Set(["learned.yaml", "learned.yml", "learned.json"]);
   const selectedFiles = defaultContextBook
-    ? files.filter((fileName) => matchesSelectedContextBook(fileName, defaultContextBook))
+    ? files.filter(
+        (fileName) =>
+          matchesSelectedContextBook(fileName, defaultContextBook) ||
+          ALWAYS_LOAD_FILES.has(fileName.toLowerCase()),
+      )
     : files;
   const filesToLoad =
     selectedFiles.length > 0
@@ -1003,6 +1039,15 @@ export async function resolveContextBookPromptContext(params: {
     ].filter(Boolean),
   );
 
+  // E3: track hitCount for auto-generated experience entries (fire-and-forget)
+  const autoHitEntries = matched.filter((entry) => entry.source === "auto");
+  if (autoHitEntries.length > 0) {
+    trackExperienceHits({
+      workspaceDir: params.workspaceDir,
+      hitEntryNames: autoHitEntries.map((e) => e.name),
+    }).catch(() => {});
+  }
+
   return {
     prependSystemContext,
     appendSystemContext,
@@ -1013,4 +1058,55 @@ export async function resolveContextBookPromptContext(params: {
     promptChars: budgeted.usedChars,
     skippedEntryNames: budgeted.skippedEntryNames,
   };
+}
+
+const LEARNED_YAML_FILES = ["learned.yaml", "learned.yml", "learned.json"];
+
+async function trackExperienceHits(params: {
+  workspaceDir: string;
+  hitEntryNames: string[];
+}): Promise<void> {
+  const workspaceDir = resolveUserPath(params.workspaceDir);
+  const contextBooksDir = path.join(workspaceDir, CONTEXT_BOOKS_DIRNAME);
+  const today = new Date().toISOString().split("T")[0];
+
+  for (const fileName of LEARNED_YAML_FILES) {
+    const filePath = path.join(contextBooksDir, fileName);
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, "utf-8");
+    } catch {
+      continue;
+    }
+
+    let modified = false;
+    for (const name of params.hitEntryNames) {
+      // Find the entry by name and update hitCount + lastHitAt via text replacement.
+      // This avoids re-serializing the entire YAML and preserves formatting/comments.
+      const namePattern = new RegExp(
+        `(- name: ["']?${escapeRegExp(name)}["']?\\n(?:.*\\n)*?\\s+hitCount: )(\\d+)`,
+      );
+      const match = content.match(namePattern);
+      if (match) {
+        const oldCount = Number.parseInt(match[2], 10);
+        content = content.replace(namePattern, `$1${oldCount + 1}`);
+        // Also update lastHitAt
+        content = content.replace(
+          new RegExp(
+            `(- name: ["']?${escapeRegExp(name)}["']?\\n(?:.*\\n)*?\\s+lastHitAt: )["']?[^\\n]*["']?`,
+          ),
+          `$1"${today}"`,
+        );
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      await fs.writeFile(filePath, content, "utf-8");
+    }
+  }
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

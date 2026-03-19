@@ -25,6 +25,7 @@ import { hasInterSessionUserProvenance } from "../../../sessions/input-provenanc
 import { resolveHookConfig } from "../../config.js";
 import type { HookHandler } from "../../hooks.js";
 import { generateSlugViaLLM } from "../../llm-slug-generator.js";
+import { extractExperienceFromSession } from "./experience-extractor.js";
 
 const log = createSubsystemLogger("hooks/session-memory");
 
@@ -280,6 +281,14 @@ const saveSessionToMemory: HookHandler = async (event) => {
     let slug: string | null = null;
     let sessionContent: string | null = null;
 
+    // Avoid calling the model provider in unit tests; keep hooks fast and deterministic.
+    const isTestEnv =
+      process.env.OPENCLAW_TEST_FAST === "1" ||
+      process.env.VITEST === "true" ||
+      process.env.VITEST === "1" ||
+      process.env.NODE_ENV === "test";
+    const allowLlm = !isTestEnv && hookConfig?.llmSlug !== false;
+
     if (sessionFile) {
       // Get recent conversation content, with fallback to rotated reset transcript.
       sessionContent = await getRecentSessionContentWithResetFallback(sessionFile, messageCount);
@@ -288,15 +297,7 @@ const saveSessionToMemory: HookHandler = async (event) => {
         messageCount,
       });
 
-      // Avoid calling the model provider in unit tests; keep hooks fast and deterministic.
-      const isTestEnv =
-        process.env.OPENCLAW_TEST_FAST === "1" ||
-        process.env.VITEST === "true" ||
-        process.env.VITEST === "1" ||
-        process.env.NODE_ENV === "test";
-      const allowLlmSlug = !isTestEnv && hookConfig?.llmSlug !== false;
-
-      if (sessionContent && cfg && allowLlmSlug) {
+      if (sessionContent && cfg && allowLlm) {
         log.debug("Calling generateSlugViaLLM...");
         // Use LLM to generate a descriptive slug
         slug = await generateSlugViaLLM({ sessionContent, cfg });
@@ -351,6 +352,22 @@ const saveSessionToMemory: HookHandler = async (event) => {
       encoding: "utf-8",
     });
     log.debug("Memory file written successfully");
+
+    // Extract experience from session conversation (if LLM is available)
+    if (sessionContent && cfg && allowLlm) {
+      try {
+        await extractExperienceFromSession({
+          sessionContent,
+          sessionId,
+          workspaceDir,
+          cfg,
+        });
+      } catch (expErr) {
+        log.debug("Experience extraction skipped or failed", {
+          error: expErr instanceof Error ? expErr.message : String(expErr),
+        });
+      }
+    }
 
     // Log completion (but don't send user-visible confirmation - it's internal housekeeping)
     const relPath = memoryFilePath.replace(os.homedir(), "~");

@@ -6,6 +6,54 @@
 
 ## 2026-03-19
 
+### 第三阶段：经验资产 E1-E3 + 经验触发修复
+
+#### 经验触发修复（天气查询未遵守经验规则）
+
+**问题**：经验资产被正确提取并写入 `learned.yaml`，关键词匹配也成功注入了 system prompt，但 deepseek-chat 未遵守注入的经验指令（仍然每次询问城市）。
+
+**根因分析**：
+
+1. 经验条目使用 `position: after_context`，在 system prompt 中段注入，deepseek 对中段指令遵从度低
+2. 经验内容以描述性语气书写（"记住用户偏好"），缺乏命令强度
+3. 无 hitCount 追踪，无法验证经验是否真正被注入
+
+**三项修复**：
+
+1. **注入位置升级**：`after_context` → `tail_reminder`（尾部提醒，模型遵从度最高）
+2. **内容格式强化**：LLM 提取 prompt 新增指令要求使用 "MUST/ALWAYS/NEVER" 命令式语气；内容前缀 `[经验规则]` 标签
+3. **E3 hitCount 追踪**：命中时自动更新 `hitCount += 1` 和 `lastHitAt`，fire-and-forget
+
+#### E1: Context Book schema 扩展
+
+- 修改 `src/agents/context-books.ts`
+  - `NormalizedContextBookEntry` 新增 6 个可选字段：`source`、`sourceSession`、`confidence`、`hitCount`、`lastHitAt`、`situation`
+  - 新增 `parseConfidence()` 解析函数
+  - `confidence: "deprecated"` 的条目在 normalization 阶段跳过（不注入 prompt）
+- 修改 `src/agents/assets.ts`
+  - `validateContextBookEntry()` 新增 6 个字段的类型校验，不报 unknown field 警告
+
+#### E2: session-memory hook 扩展
+
+- 新建 `src/hooks/bundled/session-memory/experience-extractor.ts`
+  - `extractExperienceFromSession()`：调 LLM 分析对话，提取经验规则
+  - LLM prompt 要求识别"纠正→成功"、"用户偏好"、"非显然解法"三种模式
+  - LLM prompt 强制要求结论使用命令式语气（MUST/ALWAYS/NEVER）
+  - 解析 LLM 返回的 YAML（name/keywords/situation/conclusion）
+  - 追加到 `context-books/learned.yaml`，默认 `confidence: low`、`order: 30`、`position: tail_reminder`
+  - 内容自动添加 `[经验规则]` 前缀标签
+- 修改 `src/hooks/bundled/session-memory/handler.ts`
+  - 在 memory 文件写入后调用 `extractExperienceFromSession()`
+  - 复用已有的 `allowLlm` 判断（测试环境跳过）
+  - 错误不中断主流程（try-catch 保护）
+
+#### E3: 经验命中追踪
+
+- 修改 `src/agents/context-books.ts`
+  - `resolveContextBookPromptContext()` 在匹配完成后，对 `source: auto` 的命中条目执行 fire-and-forget 回写
+  - 新增 `trackExperienceHits()`：基于文本正则更新 `learned.yaml` 中的 `hitCount` 和 `lastHitAt`
+  - 保留原有 YAML 格式和注释，不重新序列化整个文件
+
 ### 第二阶段：提示词精简 S1-S4
 
 **动机**：第一阶段资产化系统（P0-P5）建了条件注入通道，但旧的全量注入原封不动，等于只加不减。开始第二阶段真正压缩 token。
