@@ -1,11 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  formatSkillsForPrompt,
-  loadSkillsFromDir,
-  type Skill,
-} from "@mariozechner/pi-coding-agent";
+import { loadSkillsFromDir, type Skill } from "@mariozechner/pi-coding-agent";
 import type { OpenClawConfig } from "../../config/config.js";
 import { isPathInside } from "../../infra/path-guards.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
@@ -51,6 +47,28 @@ function compactSkillPaths(skills: Skill[]): Skill[] {
     ...s,
     filePath: s.filePath.startsWith(prefix) ? "~/" + s.filePath.slice(prefix.length) : s.filePath,
   }));
+}
+
+/**
+ * Compact skill prompt format: one line per skill instead of multi-line XML.
+ * Reduces ~8 lines per skill to 1, saving ~700 tokens for 8 skills.
+ */
+export function formatSkillsForPrompt(skills: Skill[]): string {
+  const visible = skills.filter((s) => !s.disableModelInvocation);
+  if (visible.length === 0) return "";
+  const lines = [
+    "",
+    "",
+    "<available_skills>",
+    "| Skill | Description | Location |",
+    "|-------|-------------|----------|",
+  ];
+  for (const skill of visible) {
+    const desc = skill.description.replace(/\s+/g, " ").trim();
+    lines.push(`| ${skill.name} | ${desc} | ${skill.filePath} |`);
+  }
+  lines.push("</available_skills>");
+  return lines.join("\n");
 }
 
 function debugSkillCommandOnce(

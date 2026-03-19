@@ -273,7 +273,11 @@ function stripSessionsYieldArtifacts(activeSession: {
     const last = strippedMessages.at(-1) as
       | AgentMessage
       | { role?: string; customType?: string; stopReason?: string };
-    if (last?.role === "assistant" && "stopReason" in last && last.stopReason === "aborted") {
+    if (
+      last?.role === "assistant" &&
+      "stopReason" in last &&
+      (last.stopReason === "aborted" || last.stopReason === "error")
+    ) {
       strippedMessages.pop();
       continue;
     }
@@ -320,7 +324,7 @@ function stripSessionsYieldArtifacts(activeSession: {
     const isYieldAbortAssistant =
       last.type === "message" &&
       last.message?.role === "assistant" &&
-      last.message?.stopReason === "aborted";
+      (last.message?.stopReason === "aborted" || last.message?.stopReason === "error");
     const isYieldInterruptMessage =
       last.type === "custom_message" && last.customType === SESSIONS_YIELD_INTERRUPT_CUSTOM_TYPE;
     if (!isYieldAbortAssistant && !isYieldInterruptMessage) {

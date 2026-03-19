@@ -60,8 +60,8 @@ describe("compactSkillPaths", () => {
         managedSkillsDir: path.join(workspaceDir, ".managed-empty"),
       });
 
-      // Should still contain a valid location tag
-      expect(prompt).toMatch(/<location>[^<]+SKILL\.md<\/location>/);
+      // Should still contain the skill location in the table
+      expect(prompt).toContain("SKILL.md");
     });
   });
 });
