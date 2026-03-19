@@ -30,17 +30,31 @@ upstream/main   →   main（只跟进，禁止直接在此开发）
 
 <!-- 记录你想改什么，AI 每次都会读这里 -->
 
+### 已完成
+
 - `extensions/trace-viewer`：基于插件系统实现 trace 采集与可视化接口
-- `src/agents/pi-embedded-*`：补齐 agentic loop 每轮 `llm_input` / `llm_output` hook，支撑 trace-viewer 看到真实多轮 LLM 过程
-- `src/agents/workspace*` / `src/agents/context-books.ts` / `src/agents/bootstrap-files.ts` / `src/agents/pi-embedded-runner/run/attempt.ts` / `src/agents/system-prompt*`：把当前固定文件槽位式提示词组织，升级为资产化系统（Agent Card / Context Book / Prompt Profile，详见 `PLAN.md`）
+- `src/agents/pi-embedded-*`：补齐 agentic loop 每轮 `llm_input` / `llm_output` hook
+- 第一阶段：资产化提示词系统（Agent Card / Context Book / Prompt Profile + CLI 管理）
+- 第二阶段：提示词精简（S1-S5 完成，baseline 精简 62%）+ Message ordering conflict 修复
+
+### 当前重点：经验资产（第三阶段）
+
+让 AI 从对话中自动提炼可复用的经验规则。经验不是新的资产类型，而是 **Context Book 的自动化层**。
+
+- E1: Context Book schema 扩展（source/confidence/hitCount 等可选字段）
+- E2: session-memory hook 扩展（/new 时顺便提取经验，零额外 LLM 调用）
+- E3: 经验命中追踪（复用 assetContext）
+- E6: 用户主动触发（"记录"/"整理笔记"）
+- E4: 置信度演进 + E5: 经验内容更新
+
+详细方案见 `PLAN.md` 第三阶段。
 
 当前原则：
 
-- 能用插件解决的，优先放在 `extensions/trace-viewer`
-- 只有在现有 hook 粒度不足时，才改核心运行时
+- 经验条目是 CB 条目，复用全部 CB 基础设施（触发/注入/预算/validate）
+- 触发时机只用已有机制（session-memory hook + 用户主动指令），不做实时自动检测
+- 经验条目低 `order`（30），不挤占手写条目的预算
 - 核心改动必须补测试，并在 `devlog.md` 记录原因
-- 新提示词系统优先借鉴 SillyTavern 的资产模型（角色卡 / 世界书 / 预设），不照搬其 jailbreak 体系
-- Prompt Profile 可以表达工具偏好和缩减范围，但不能突破 OpenClaw 现有硬权限边界
 
 ## 当前活跃分支
 

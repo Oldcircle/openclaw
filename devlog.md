@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-03-19
+
+### 第二阶段：提示词精简 S1-S4
+
+**动机**：第一阶段资产化系统（P0-P5）建了条件注入通道，但旧的全量注入原封不动，等于只加不减。开始第二阶段真正压缩 token。
+
+#### S1: 空文件不注入
+
+- 修改 `src/agents/pi-embedded-helpers/bootstrap.ts`
+  - `buildBootstrapContextFiles()` 中 `file.missing` 直接 `continue`，不再注入 `[MISSING] Expected at:` 占位文本
+  - 原逻辑会为不存在的 BOOTSTRAP.md 等注入无信息量的 missing marker
+
+#### S3: Skill 列表压缩
+
+- 修改 `src/agents/skills/workspace.ts`
+  - 新增本地 `formatSkillsForPrompt()` 函数，输出表格格式（每 skill 1 行）
+  - 不再从 `@mariozechner/pi-coding-agent` 导入同名函数（外部包输出 XML，每 skill 5 行）
+  - 8 个 skill 从 ~56 行压缩到 ~10 行
+
+#### S4: AGENTS.md 精简
+
+- 修改 `~/.openclaw/workspace/AGENTS.md`（workspace 文件，非代码）
+  - 213 行 → ~50 行
+  - 精简原则：删教学段落、emoji 装饰、JSON 示例、人类类比；只保留规则条目
+  - 心跳 82 行教程 → 8 行规则
+  - 群聊 47 行教学 → 5 行行为规则
+  - Memory 28 行教学 → 5 行文件规则
+
+#### S2: 去重合并
+
+- 无代码改动——S4 精简后，AGENTS.md 与核心区 system-prompt.ts 的重复（Safety、Heartbeat、Memory）自然消除
+
+#### Bugfix: Message ordering conflict
+
+- 修改 `src/agents/pi-embedded-runner/run/attempt.ts`
+  - 问题：API 返回错误时，空 assistant 消息（`stopReason: "error"`, `content: []`）被持久化到 session，导致后续消息历史角色不交替
+  - 根因：清理逻辑只检查 `stopReason === "aborted"`，没覆盖 `"error"`
+  - 修复：两处条件扩展为 `(stopReason === "aborted" || stopReason === "error")`
+  - 真实触发：DeepSeek 3/17（`tool role without tool_calls`）、Gemini 3/5（空响应）
+
+#### S5: 条件注入替代全量注入
+
+- 修改 `~/.openclaw/workspace/AGENTS.md`
+  - 移除 Group Chats 段（5 行）和 Heartbeats 段（8 行）
+  - 这些内容不再每轮全量注入，改为 Context Book 条件触发
+  - AGENTS.md 进一步精简到 ~32 行
+- 新建 `~/.openclaw/workspace/context-books/system-guidance.yaml`
+  - 群聊行为规则：`chatTypes: ["group"]` — 只在群聊时注入
+  - 心跳执行规则：`keywords: ["heartbeat", ...]` — 只在心跳相关消息时注入
+  - Memory 操作规则：`keywords: ["memory", "记忆", ...]` — 只在记忆相关话题时注入
+  - Cron 使用规则：`keywords: ["cron", "定时", ...]` — 只在定时任务话题时注入
+
+### 验证
+
+- `pnpm test`：921 文件 / 7599 测试全部通过
+- `openclaw assets validate`：all assets validated, no issues
+
+---
+
 ## 2026-03-18
 
 ### P4 批量推进：预算配置化 + 条目生命周期控制

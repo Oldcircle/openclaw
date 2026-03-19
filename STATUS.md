@@ -4,11 +4,43 @@
 
 ## 当前进度
 
-| 方向              | 状态    | 说明                                                                |
-| ----------------- | ------- | ------------------------------------------------------------------- |
-| trace-viewer 插件 | 已完成  | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过 |
-| 核心 LLM hook     | 已完成  | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                  |
-| 资产化提示词系统  | P5 完成 | P0-P4 核心已完成，P5.1-P5.4 全部完成                                |
+| 方向                       | 状态         | 说明                                                                        |
+| -------------------------- | ------------ | --------------------------------------------------------------------------- |
+| trace-viewer 插件          | 已完成       | blob store + collector + API 已落地，3/17 真实 Gateway API 验证通过         |
+| 核心 LLM hook              | 已完成       | 每轮 `llm_input`/`llm_output` hook，见 devlog 3/14                          |
+| 第一阶段：资产化提示词系统 | 已完成       | P0-P5 全部完成（Agent Card / Context Book / Prompt Profile + CLI 资产管理） |
+| 第二阶段：提示词精简       | S1-S5 完成   | baseline 精简 62%（504→~200 行）+ Message ordering conflict 修复            |
+| **第三阶段：经验资产**     | **规划完成** | **从对话中自动提炼可复用经验，作为 Context Book 自动化层，详见 PLAN.md**    |
+
+## 第二阶段：提示词精简进度
+
+> 核心问题：第一阶段建了条件注入通道但没减少旧的全量注入，等于只加不减。本阶段用新通道替代旧通道，并精简 baseline。
+
+| 步骤 | 内容                                                   | 预估节省     | 状态   | 备注                                                 |
+| ---- | ------------------------------------------------------ | ------------ | ------ | ---------------------------------------------------- |
+| S1   | 空文件不注入（missing 文件跳过 `[MISSING]` 标记）      | ~800 token   | 已完成 | `buildBootstrapContextFiles` 直接 skip missing files |
+| S2   | 去重合并（Safety×2, Heartbeat×3, Memory×2）            | ~1,500 token | 已完成 | S4 精简后重复自然消除（核心区与 AGENTS.md 不再重叠） |
+| S3   | Skill 列表从 XML 压缩为单行表格                        | ~700 token   | 已完成 | `formatSkillsForPrompt` 本地重写，每 skill 1 行表格  |
+| S4   | AGENTS.md 教学内容精简（213 行→~50 行）                | ~2,000 token | 已完成 | workspace AGENTS.md 精简，删除教学段/emoji/示例代码  |
+| S5   | 条件注入替代全量注入（群聊/心跳/Memory/Cron 按需注入） | ~1,000 token | 已完成 | AGENTS.md 拆分 + system-guidance.yaml CB             |
+| S6   | 延迟加载 Skills/工具描述                               | 待定         | 长期   | S1-S5 完成后评估                                     |
+
+**实施顺序**：~~S1~~ → ~~S4~~ → ~~S2~~ → ~~S3~~ → ~~S5~~ （S1-S5 全部完成）
+
+## 第三阶段：经验资产进度
+
+> 核心思路：经验不是新的资产类型，而是 Context Book 的自动化层。触发时机复用已有的 session-memory hook 和用户主动指令。
+
+| 步骤 | 内容                                                              | 状态   | 备注              |
+| ---- | ----------------------------------------------------------------- | ------ | ----------------- |
+| E1   | Context Book schema 扩展（source/confidence/hitCount 等可选字段） | 待开始 |                   |
+| E2   | session-memory hook 扩展（/new 时顺便提取经验）                   | 待开始 | 核心创建流程      |
+| E3   | 经验命中追踪（llm_input hook 更新 hitCount）                      | 待开始 | 复用 assetContext |
+| E6   | 用户主动触发（"记录一下"/"整理笔记"）                             | 待开始 |                   |
+| E4   | 置信度演进（low→medium→high→proven + 降级废弃）                   | 待开始 |                   |
+| E5   | 经验内容更新（命中但仍被纠正时补充 conclusion）                   | 待开始 |                   |
+
+**实施顺序**：E1 → E2 → E3 → E6 → E4 → E5
 
 ## 资产化提示词系统进度
 
@@ -76,7 +108,44 @@
 - ~~`loadAgentCardDocument` 返回 `[]` 导致 Agent Card 静默失效~~ → 已修复（3/17，`return []` → `return null`）
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
-## 最新进展（2026-03-18）
+## 最新进展（2026-03-19）
+
+### 3/19: 第二阶段提示词精简 S1-S4 完成
+
+- **S1: 空文件不注入**
+  - `buildBootstrapContextFiles()` 中 `missing: true` 文件不再注入 `[MISSING] Expected at: ...` 标记，直接跳过
+  - 修改文件：`src/agents/pi-embedded-helpers/bootstrap.ts`
+  - 测试更新：2 个测试改为验证 missing files 被跳过
+
+- **S3: Skill 列表从 XML 压缩为表格**
+  - `formatSkillsForPrompt()` 从外部包 XML 格式（每 skill 5 行）改为本地表格格式（每 skill 1 行）
+  - 修改文件：`src/agents/skills/workspace.ts`（新增本地 `formatSkillsForPrompt`，不再从 `@mariozechner/pi-coding-agent` 导入）
+  - 测试更新：1 个测试改为验证表格格式
+
+- **S4: AGENTS.md 教学内容精简**
+  - workspace `~/.openclaw/workspace/AGENTS.md` 从 213 行精简到 ~50 行
+  - 删除内容：First Run 段、emoji 标题、人类类比、JSON 示例、心跳教程（82→8 行）、群聊教学（47→5 行）、Memory 教学（28→5 行）、Make It Yours 段
+  - 保留内容：Every Session 启动清单、Memory 文件规则、Safety 实操规则、Group Chat 行为规则、Platform formatting、Heartbeat 核心规则
+
+- **S2: 去重合并**
+  - S4 精简后重复自然消除：核心区 Safety（抽象原则）vs AGENTS.md Safety（实操规则）不再重叠；Heartbeat、Memory 同理
+  - 无需额外代码改动
+
+- **全套测试通过**：921 个文件 / 7599 个测试，0 失败
+
+### 3/19: S5 条件注入替代全量注入
+
+- **AGENTS.md 拆分**：
+  - 从 AGENTS.md 移除 Group Chats（5 行）和 Heartbeats（8 行）段落
+  - AGENTS.md 从 ~50 行进一步精简到 ~32 行，只保留始终需要的内容（Every Session、Memory、Safety、Tools）
+- **新建 `context-books/system-guidance.yaml`**：
+  - 群聊行为规则：`chatTypes: ["group"]` + `alwaysActive: true` → 只在群聊时注入
+  - 心跳执行规则：`keywords: ["heartbeat", "HEARTBEAT_OK"]` → 只在心跳相关时注入
+  - Memory 操作规则：`keywords: ["memory", "记忆", "记住", ...]` → 只在相关话题时注入
+  - Cron 使用规则：`keywords: ["cron", "定时", "提醒", ...]` → 只在相关话题时注入
+- **资产验证通过**：`openclaw assets validate` 报告 no issues
+
+## 之前进展（2026-03-18）
 
 ### 3/18: trace-viewer 资产集成全链路完成（Phase A+B+C + 注入格式修复）
 

@@ -1,12 +1,12 @@
-# OpenClaw 二开计划：资产化提示词系统
+# OpenClaw 二开计划
 
-> 新方向：不再把优化目标局限在“缩短 system prompt”，而是把 OpenClaw 当前零散的提示词组织方式，升级为类似 SillyTavern 的**资产化、分层化、条件注入**系统。
+> 两阶段目标：
 >
-> 目标不是把 OpenClaw 变成酒馆，而是把酒馆里成熟的资产模型迁移到 Agent 场景：
+> **第一阶段（已完成）：资产化** — 把固定文件槽位式提示词升级为 SillyTavern 式资产系统（Agent Card / Context Book / Prompt Profile），建立条件注入和预算治理能力。
 >
-> - 角色卡 → Agent Card
-> - 世界书 → Context Book
-> - 预设 → Prompt Profile
+> **第二阶段（进行中）：提示词精简** — 用第一阶段建好的基础设施，加上直接的 baseline 压缩，真正减少每轮 LLM 请求的 token 消耗。
+>
+> 二开的初始动机就是降低 token 消耗。第一阶段建了「条件注入」通道但没有减少旧的「全量注入」，等于只加不减。第二阶段的核心是**用新通道替代旧通道，并精简 baseline**。
 
 ## 前置分析
 
@@ -633,7 +633,7 @@ entries:
 | `~/Opensource/vendor/ST/docs/用户消息到LLM完整流程解析.md` | → 端到端流程理解              |
 | `~/Opensource/vendor/ST/docs/其他核心技术系统.md`          | → 宏/变量系统参考             |
 
-## 验证方案
+## 验证方案（第一阶段）
 
 1. **结构验证**
    新资产能映射回当前 OpenClaw 语义，不丢失核心能力。
@@ -652,3 +652,627 @@ entries:
 
 5. **兼容验证**
    没有新资产时，旧的 workspace 文件依然可用。
+
+---
+
+# 第二阶段：提示词精简
+
+> 第一阶段建了资产化基础设施（Agent Card / Context Book / Prompt Profile），但**旧的全量注入原封不动**，等于只加不减。
+>
+> 本阶段目标：**用已有的条件注入能力替代旧的全量注入，并精简 baseline system prompt，真正降低每轮 token 消耗。**
+>
+> 参考分析：
+>
+> - `~/Opensource/notes/ClaudeCode与OpenClaw系统提示词深度对比.md`（P0-P5 优化层级、62% 精简预估）
+> - `~/Opensource/notes/OpenClaw提示词工程与架构改进分析.md`（条件注入 + 尾部重复注入方案）
+
+## 当前 baseline（优化前）
+
+基于 3/17 真实 Gateway `/context detail` 的数据：
+
+- system prompt 总体积：~26,000 字符 / ~504 行
+- `##` 级章节数：43
+- Project Context（bootstrap 文件）上限：150,000 字符
+- Skill 列表格式：XML，每个 ~8 行 / ~60-100 token
+- 注入策略：全量（所有 workspace 文件每轮都发）
+
+**优化目标**：从 ~504 行 / ~26K 字符 精简到 ~200 行 / ~12K 字符（精简 50%+），同时不降低功能。
+
+## S1：空内容不注入
+
+**目标**：去掉无内容的 bootstrap 文件注入，消除纯噪音。
+
+**当前问题**：
+
+| 文件           | 当前状态                          | 每轮占用 |
+| -------------- | --------------------------------- | -------- |
+| `TOOLS.md`     | 全是模板示例文本，无用户实际内容  | ~40 行   |
+| `HEARTBEAT.md` | 内容为空（只有注释）              | ~6 行    |
+| `BOOTSTRAP.md` | 文件不存在，注入 `[MISSING]` 标记 | ~2 行    |
+
+**做法**：
+
+- 修改 `src/agents/bootstrap-files.ts`（`resolveBootstrapFilesForRun` 或 `buildBootstrapContextFiles`）
+- 在注入前判断：文件不存在 → 跳过；文件内容去掉注释/空行后为空 → 跳过
+- 对 `[MISSING]` 标记文件不再注入占位行
+
+**涉及文件**：
+
+| 文件                            | 改动                                 |
+| ------------------------------- | ------------------------------------ |
+| `src/agents/bootstrap-files.ts` | 空文件跳过逻辑                       |
+| `src/agents/workspace.ts`       | 去掉 missing marker 注入（部分已做） |
+
+**预估节省**：~48 行 / ~800 token
+
+**风险**：极低。去掉的是零信息量内容。
+
+**验证**：
+
+- `pnpm exec vitest run src/agents/bootstrap-files.test.ts src/agents/workspace.test.ts`
+- 真实 Gateway `/context detail` 对比
+
+---
+
+## S2：去重合并
+
+**目标**：消除 system prompt 中重复定义的段落。
+
+**当前重复**：
+
+| 主题      | 出现位置                                     | 重复行为                                       |
+| --------- | -------------------------------------------- | ---------------------------------------------- |
+| Safety    | 核心区 7 行 + AGENTS.md 4 行                 | 两处风格不一致（学术化 vs 口语化），内容有重叠 |
+| Heartbeat | 核心区 6 行 + AGENTS.md 82 行 + HEARTBEAT.md | 核心区有触发规则，AGENTS.md 有完整教程         |
+| Memory    | 核心区 3 行 + AGENTS.md 28 行                | 核心区有工具说明，AGENTS.md 有教学解释         |
+| 工具使用  | 核心区 Tooling 段 + AGENTS.md Tools 段       | 部分重叠的使用指南                             |
+
+**做法**：
+
+合并策略（以 Safety 为例）：
+
+- 核心区保留统一的 Safety 段（~8 行，合并两处精华）
+- AGENTS.md 删除重复的 Safety 段
+- 对 Heartbeat / Memory / Tools 同理处理
+
+**涉及文件**：
+
+| 文件                          | 改动                                           |
+| ----------------------------- | ---------------------------------------------- |
+| `src/agents/system-prompt.ts` | 合并/精简 Safety、Heartbeat、Memory 段 builder |
+| workspace `AGENTS.md`         | 删除与核心区重复的段落                         |
+
+**注意**：AGENTS.md 是用户 workspace 文件，核心代码侧的改动只涉及 `system-prompt.ts` 里的 hardcoded 段；AGENTS.md 侧的精简需要同步更新 workspace 文件。
+
+**预估节省**：~90 行 / ~1,500 token
+
+**风险**：低。合并而非删除，语义不丢失。需要逐条确认合并后的措辞覆盖了两处的全部要点。
+
+**验证**：
+
+- `pnpm exec vitest run src/agents/system-prompt.test.ts`
+- 真实 Gateway 对话验证行为不退化
+
+---
+
+## S3：Skill 列表压缩
+
+**目标**：把 Skill 列表从冗长的 XML 格式压缩为紧凑格式。
+
+**当前格式**（每 skill ~8 行 XML）：
+
+```xml
+<skill>
+  <name>weather</name>
+  <description>Get current weather and forecasts via wttr.in or Open-Meteo.
+  Use when: user asks about weather, temperature, or forecasts for any location.
+  NOT for: historical weather data, severe weather alerts, or detailed
+  meteorological analysis. No API key needed.</description>
+  <location>~/...skills/weather/SKILL.md</location>
+</skill>
+```
+
+**目标格式**（每 skill 1 行）：
+
+```
+| Skill | Trigger | Location |
+|-------|---------|----------|
+| weather | 天气/温度/预报查询 | skills/weather/SKILL.md |
+| coding-agent | 编码任务委托 | skills/coding-agent/SKILL.md |
+```
+
+Claude Code 证明了模型不需要 "Use when / NOT for" 的详细判断指南——一句话触发条件足够。Skill 的详细内容在被调用时才通过 SKILL.md 完整加载。
+
+**涉及文件**：
+
+| 文件                             | 改动                                        |
+| -------------------------------- | ------------------------------------------- |
+| `src/agents/skills/workspace.ts` | 修改 skill prompt 生成逻辑，从 XML 改为表格 |
+| `src/agents/system-prompt.ts`    | 调整 buildSkillsSection 的输出格式          |
+
+**预估节省**：8 个 skill × ~7 行 = ~56 行 → ~10 行，节省 ~46 行 / ~700 token。Skill 数量增长后收益线性放大。
+
+**风险**：低。参考 Claude Code 实践验证过模型对精简 skill 描述的理解能力足够。
+
+**验证**：
+
+- `pnpm exec vitest run src/agents/skills/workspace.test.ts src/agents/system-prompt.test.ts`
+- 真实 Gateway 验证 skill 触发准确率
+
+---
+
+## S4：AGENTS.md 教学内容精简
+
+**目标**：把 workspace AGENTS.md 中的大段教学内容压缩为规则条目。
+
+**当前最重的章节**：
+
+| 章节                       | 行数  | 内容性质                                          | 精简方案                 |
+| -------------------------- | ----- | ------------------------------------------------- | ------------------------ |
+| Heartbeats - Be Proactive! | 82 行 | 教学（什么是心跳、何时主动、检查清单、JSON 示例） | → ~12 行核心规则         |
+| Group Chats                | 47 行 | 教学（何时说话、何时沉默、反应指南）              | → ~10 行行为规则         |
+| Memory                     | 28 行 | 教学（什么是日记、什么是长期记忆）                | → 合并到核心区 ~8 行     |
+| Every Session              | 11 行 | 启动清单                                          | → 保留但精简             |
+| External vs Internal       | 14 行 | 安全边界                                          | → 合并到 S2 的 Safety 段 |
+
+**精简原则**（参考 Claude Code 风格）：
+
+- 删除解释性段落，只保留规则（模型不需要"为什么"的解释来遵守规则）
+- 删除 emoji 标题装饰（`💓`、`😊`、`📝` 不增加信息量）
+- 删除示例代码块（如 `heartbeat-state.json` 完整示例），首次使用时由模型自行创建
+- 删除人类类比（"Humans in group chats don't respond to every single message"）
+- 用短规则替代段落叙述
+
+**精简前后对比**（心跳章节）：
+
+精简前（82 行，摘录）：
+
+```markdown
+## 💓 Heartbeats - Be Proactive!
+
+When you receive a heartbeat poll (message matches the configured heartbeat prompt),
+don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
+
+### Heartbeat vs Cron: When to Use Each
+
+**Use heartbeat when:**
+
+- Multiple checks can batch together...
+  **Use cron when:**
+- Exact timing matters...
+```
+
+精简后（~12 行）：
+
+```markdown
+## Heartbeats
+
+- 收到心跳 poll 时，执行 HEARTBEAT.md 中的任务清单；无任务则回复 HEARTBEAT_OK
+- 心跳适合批量周期检查（邮件+日历+通知合并一轮）；精确定时用 cron
+- 每日轮检 2-4 次：邮件、日历、社交通知、天气
+- 深夜（23:00-08:00）除紧急事项外保持安静
+- 检查状态记录在 memory/heartbeat-state.json
+- 每隔几天用心跳整理 memory/ 日志到 MEMORY.md
+```
+
+**注意**：AGENTS.md 是 workspace 文件，不是核心代码。精简方式有两种：
+
+1. 直接编辑 workspace AGENTS.md（适合我们自己的 workspace）
+2. 修改 `buildBootstrapContextFiles()` 在注入前做内容压缩（对所有用户生效，但改动大且有风险）
+
+建议先做方式 1（我们自己的 workspace），后续考虑是否做方式 2。
+
+**涉及文件**：
+
+| 文件                                    | 改动           |
+| --------------------------------------- | -------------- |
+| workspace `AGENTS.md`                   | 精简教学内容   |
+| （可选）`src/agents/bootstrap-files.ts` | 注入前压缩逻辑 |
+
+**预估节省**：~120 行 / ~2,000 token
+
+**风险**：中。精简过度可能导致心跳/群聊行为退化。需要逐条验证精简后的规则是否覆盖了原始教学内容的关键行为点。
+
+**验证**：
+
+- 真实 Gateway 心跳测试（触发心跳，观察行为）
+- 真实 Gateway 群聊测试（在 Telegram 群组中测试发言/沉默策略）
+- `/context detail` 对比体积变化
+
+---
+
+## S5：条件注入替代全量注入
+
+**目标**：用第一阶段建好的 Context Book 条件注入能力，把原本每轮全量注入的内容改为按需注入。这是第二阶段最核心的一步——**让资产化系统真正兑现 token 节省承诺**。
+
+**替代方案**：
+
+| 原始内容                                   | 当前注入方式 | 改为              | 触发条件                                       |
+| ------------------------------------------ | ------------ | ----------------- | ---------------------------------------------- |
+| 群聊规则（AGENTS.md 47 行）                | 每轮全量注入 | Context Book 条目 | `chatTypes: ["group"]`                         |
+| Reactions 指南（~10 行）                   | 每轮全量注入 | Context Book 条目 | `channels: ["telegram", "discord"]`            |
+| Reply Tags 规则（~7 行）                   | 每轮全量注入 | Context Book 条目 | 仅支持 reply 的平台注入                        |
+| 心跳完整规则（AGENTS.md 82 行→精简 12 行） | 每轮全量注入 | Context Book 条目 | `sessionKinds: ["heartbeat"]`                  |
+| Memory 使用教程（AGENTS.md 28 行）         | 每轮全量注入 | Context Book 条目 | `keywords: ["memory", "记忆", "记住", "日记"]` |
+| Cron 使用指南（~15 行）                    | 每轮全量注入 | Context Book 条目 | `keywords: ["cron", "定时", "定期"]`           |
+
+**实现方式**：
+
+1. 创建一个内置 Context Book（如 `context-books/system-guidance.yaml`），包含上述条目
+2. 每个条目设置精确的触发条件（chatType / channel / sessionKind / keywords）
+3. 从 AGENTS.md 和 `system-prompt.ts` hardcoded 段中移除对应的全量注入内容
+4. 在 system prompt 中保留每个主题的**一行摘要提示**（让模型知道这个能力存在），详细规则只在触发时注入
+
+**示例 Context Book**：
+
+```yaml
+entries:
+  - name: "群聊行为规则"
+    chatTypes: ["group"]
+    alwaysActive: true
+    position: after_context
+    order: 80
+    content: |
+      群聊规则：
+      - 只在被 @ 或话题相关时回复，不回复每条消息
+      - 群聊中保持简短
+      - 用 reactions 代替无信息量的回复
+      ...（精简版 ~10 行）
+
+  - name: "心跳执行规则"
+    sessionKinds: ["heartbeat"]
+    alwaysActive: true
+    position: before_context
+    ignoreBudget: true
+    content: |
+      心跳规则：
+      - 执行 HEARTBEAT.md 中的任务清单；无任务则回复 HEARTBEAT_OK
+      - 批量检查：邮件+日历+通知合并一轮
+      ...（精简版 ~12 行）
+
+  - name: "Memory 使用规则"
+    keywords: ["memory", "记忆", "记住", "日记", "长期记忆"]
+    position: after_context
+    content: |
+      Memory 规则：
+      - 用 memory_search 语义检索，用 memory_get 读片段
+      - 日记存 memory/ 目录，长期整理存 MEMORY.md
+      ...（~8 行）
+```
+
+**涉及文件**：
+
+| 文件                                           | 改动                                                             |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `src/agents/system-prompt.ts`                  | 把条件化的段落从 hardcoded builder 中移除（保留一行摘要）        |
+| `src/agents/bootstrap-files.ts`                | 内置 Context Book 加载路径                                       |
+| `src/agents/context-books.ts`                  | 可能需要支持"内置 Context Book"概念（跟 workspace 用户 CB 合并） |
+| workspace `AGENTS.md`                          | 移除已迁移到 CB 的内容                                           |
+| workspace `context-books/system-guidance.yaml` | 新建内置 guidance CB                                             |
+
+**预估节省**：私聊场景（最常见）每轮可省 ~60 行 / ~1,000 token（群聊规则 + Reactions + 心跳规则不注入）。关键词触发的条目只在相关话题时注入，其余时候零开销。
+
+**风险**：中。需要确保：
+
+- 条件触发的灵敏度足够（避免需要时没注入）
+- 保留在 system prompt 中的一行摘要足以让模型知道该能力存在
+- 内置 CB 和用户 CB 的合并不产生冲突
+
+**验证**：
+
+- 私聊场景 `/context detail`：确认群聊/心跳/Reactions 规则不出现
+- 群聊场景 `/context detail`：确认群聊规则正常注入
+- 心跳场景 `/context detail`：确认心跳规则正常注入
+- 关键词触发场景：发送含 "memory" 的消息，确认 Memory 规则注入
+
+---
+
+## S6：延迟加载（长期方向）
+
+**目标**：参考 Claude Code 的 Deferred Tools 机制，把 Skill 详细描述和工具使用指南改为按需加载。
+
+**Claude Code 的做法**：
+
+```
+系统提示词里只列名称：
+<available-deferred-tools>
+AskUserQuestion, WebFetch, WebSearch, ...
+</available-deferred-tools>
+
+需要用时才获取完整 schema：
+→ 调用 ToolSearch("select:WebFetch") → 返回完整 JSON Schema
+```
+
+**OpenClaw 可借鉴的方向**：
+
+- Skills 在系统提示词里只列名称 + 一句话描述，完整 SKILL.md 在调用时才加载（S3 已部分实现）
+- 工具的详细使用指南（如 `cron` 工具的长描述）拆到按需读取
+- AGENTS.md 中的教学内容做成"内置 skill"，首次遇到相关场景时自动加载
+
+**暂不实施**：需要更大的架构改动（运行时 skill 动态加载机制），且收益依赖 skill 数量增长。等 S1-S5 完成后根据实际 token 数据决定是否推进。
+
+---
+
+## 第二阶段优化效果预估
+
+| 步骤     | 措施               | 节省行数       | 节省 token | 难度 |
+| -------- | ------------------ | -------------- | ---------- | ---- |
+| S1       | 空文件不注入       | ~48 行         | ~800       | 低   |
+| S2       | 去重合并           | ~90 行         | ~1,500     | 低   |
+| S3       | Skill 列表压缩     | ~46 行         | ~700       | 低   |
+| S4       | AGENTS.md 教学精简 | ~120 行        | ~2,000     | 中   |
+| S5       | 条件注入替代全量   | ~60 行（私聊） | ~1,000     | 中   |
+| **合计** |                    | **~364 行**    | **~6,000** |      |
+
+从 ~504 行 / ~26K 字符 → ~140 行 / ~10K 字符，**精简约 62%**。
+
+### 收益分析
+
+即使有 prompt caching（缓存命中 1/10 价格），优化仍有意义：
+
+1. **首次调用（cache miss）**：直接节省 ~6,000 token 的全价输入费用
+2. **缓存写入成本**：更短的 prompt = 更低的 cache write 费用（cache write 比普通输入贵 25%）
+3. **首次响应延迟**：更短的 prompt = 更快的 TTFT（与输入长度正相关）
+4. **注意力质量**：更精简的指令 = 模型对每条规则的遵循度更高（U 型注意力效应下中间段指令容易被忽视）
+
+## 第二阶段实施顺序
+
+### 推荐顺序：S1 → S4 → S2 → S3 → S5
+
+**S1 最先做**：改动最小（~10 行代码）、零风险、立即见效。
+
+**S4 紧接**：AGENTS.md 精简不改核心代码，只改 workspace 文件，可以快速迭代验证。且 S4 的产出（精简后的规则）是 S5 的输入（要迁移到 Context Book 的内容）。
+
+**S2 + S3 中间做**：涉及 `system-prompt.ts` 和 skills 代码改动，需要更多测试，但风险仍然可控。
+
+**S5 最后做**：依赖 S4 的精简结果，且改动面最大（新建内置 CB、修改多个注入链路）。
+
+### 每步完成后的检查点
+
+每完成一步，必须：
+
+1. 运行相关测试套件
+2. 启动真实 Gateway，执行 `/context detail` 对比体积变化
+3. 发送几条典型消息验证行为不退化
+4. 更新 `STATUS.md` 记录实际节省数据
+
+## 第二阶段涉及的关键文件
+
+| 文件                             | S1  | S2  | S3  | S4  | S5  |
+| -------------------------------- | --- | --- | --- | --- | --- |
+| `src/agents/bootstrap-files.ts`  | ✓   |     |     |     | ✓   |
+| `src/agents/system-prompt.ts`    |     | ✓   | ✓   |     | ✓   |
+| `src/agents/skills/workspace.ts` |     |     | ✓   |     |     |
+| `src/agents/workspace.ts`        | ✓   |     |     |     |     |
+| `src/agents/context-books.ts`    |     |     |     |     | ✓   |
+| workspace `AGENTS.md`            |     | ✓   |     | ✓   | ✓   |
+| workspace `context-books/*.yaml` |     |     |     |     | ✓   |
+
+---
+
+# 第三阶段：经验资产（自动学习）
+
+> 让 AI 从对话中自动提炼可复用的经验规则，下次遇到类似场景时直接做对，不再重复犯错。
+>
+> 经验资产不是新的资产类型，而是 **Context Book 的自动化层**——自动生成的 CB 条目带有生命周期管理（置信度、命中计数、废弃机制）。
+>
+> 参考分析：
+>
+> - `~/Opensource/notes/OpenClaw记忆系统架构与实现深度分析.md`（现有记忆系统能力边界）
+
+## 核心设计
+
+### 经验资产 = Context Book 条目 + 生命周期字段
+
+不发明新的资产类型，复用 Context Book 的全部基础设施（关键词触发、位置控制、预算限制、validate/list/export），只扩展几个字段：
+
+```yaml
+# context-books/learned.yaml
+entries:
+  - name: "Gateway 重启：先查端口"
+    keywords: ["重启", "gateway", "EADDRINUSE", "启动失败"]
+    position: after_context
+    order: 30 # 低于手写条目，预算紧张时优先跳过
+    content: |
+      - 重启前先 lsof -i :PORT 查占用
+      - 有旧进程 → kill 后再启动
+      - module not found → 先 pnpm build
+
+    # ---- 经验扩展字段 ----
+    source: auto # auto=AI 自动生成, manual=手写
+    sourceSession: "session:6333cde8" # 来源会话
+    confidence: high # low → medium → high → proven
+    hitCount: 5 # 被触发次数
+    lastHitAt: "2026-03-19" # 最近一次触发时间
+    situation: | # 背景信息（不注入 prompt，AI 需要时自行读取）
+      用户要求重启 Gateway 时，常见两种失败：
+      端口占用(EADDRINUSE)和未编译(module not found)。
+```
+
+### 与手写条目的关系
+
+```yaml
+# context-books/cat-knowledge.yaml    ← 手写，order: 100，永远优先
+# context-books/system-guidance.yaml  ← S5 迁移的系统规则，order: 60-95
+# context-books/learned.yaml          ← 自动生成的经验，order: 30，用剩余预算
+```
+
+手写条目高 `order`，经验条目低 `order`。预算紧张时手写条目优先保留，经验条目优先跳过。对运行时来说全部是 Context Book 条目，零新概念。
+
+## 触发时机
+
+只有两个触发点，都是已有的机制：
+
+### 触发点 1：用户主动要求
+
+用户说"记录一下"、"整理成笔记"、"记住这个"时，插件提取当前对话中的经验。
+
+- 零误判——用户明确要求
+- 用户比 AI 更清楚什么值得记
+
+### 触发点 2：session-memory hook（/new、/reset）
+
+现有的 `session-memory` 内置 hook 在 `/new` 或 `/reset` 时已经会：
+
+1. 读取最近 N 条消息
+2. 调 LLM 生成会话摘要
+3. 写入 `memory/YYYY-MM-DD-slug.md`
+
+扩展方案：**在同一次 LLM 调用中，多问一句"有没有值得提炼的经验规则"**。
+
+- 不增加新的触发点
+- 不增加额外的 hook 或 LLM 调用
+- 只扩展现有 hook 的 prompt 和输出解析
+
+## 实现方案
+
+### E1：Context Book schema 扩展
+
+给 Context Book 条目增加可选的经验字段（不影响现有条目）：
+
+| 字段            | 类型   | 默认值     | 说明                                                |
+| --------------- | ------ | ---------- | --------------------------------------------------- |
+| `source`        | string | `"manual"` | `"auto"` = AI 生成，`"manual"` = 手写               |
+| `sourceSession` | string | (空)       | 来源会话 ID                                         |
+| `confidence`    | string | (空)       | `low` / `medium` / `high` / `proven` / `deprecated` |
+| `hitCount`      | number | (空)       | 累计触发次数                                        |
+| `lastHitAt`     | string | (空)       | 最近触发日期                                        |
+| `situation`     | string | (空)       | 背景信息（不注入 prompt，供 AI 按需读取）           |
+
+这些字段对现有 CB 引擎透明——不认识就忽略，不影响触发/注入/预算逻辑。
+
+**涉及文件**：
+
+- `src/agents/context-books.ts`：类型定义扩展（可选字段）
+- `src/cli/assets-cli.ts`：`assets validate` 识别新字段不报警告
+
+### E2：session-memory hook 扩展
+
+修改 `src/hooks/bundled/session-memory/handler.ts`，在生成会话摘要的同时提取经验。
+
+**当前 prompt**（只做摘要）：
+
+```
+总结这段对话的要点。
+```
+
+**扩展后 prompt**（摘要 + 经验提取）：
+
+```
+总结这段对话。另外，如果对话中出现了以下模式，请额外提取经验规则：
+- AI 犯了错误，用户纠正后成功
+- 用户明确表达了偏好或要求
+- 发现了某个问题的正确解决方法
+
+对话摘要：（原有格式）
+
+经验提取（如果有，输出 YAML；如果没有，输出 none）：
+name: 简短标题
+keywords: [5-8 个触发关键词]
+situation: 什么场景下遇到（2 句话）
+conclusion:
+  - 行动规则 1
+  - 行动规则 2
+  - 行动规则 3
+```
+
+**输出解析**：
+
+- 如果 LLM 输出了经验 YAML → 追加到 `context-books/learned.yaml`
+- 如果输出 `none` → 不操作
+- 新条目默认 `confidence: low`、`source: auto`、`order: 30`
+
+**涉及文件**：
+
+- `src/hooks/bundled/session-memory/handler.ts`：扩展 prompt + 解析输出 + 写入 CB
+
+### E3：经验命中追踪
+
+在插件的 `llm_input` hook 中追踪经验条目的命中情况。
+
+第一阶段做的 `assetContext`（trace-viewer Phase A）已经在 `llm_input` hook payload 中包含了命中的 Context Book 条目列表。插件只需要：
+
+1. 从 `assetContext.contextBooks.matched` 找到 `source: auto` 的条目
+2. 更新对应条目的 `hitCount += 1`、`lastHitAt = today`
+
+**涉及文件**：
+
+- 新建 `extensions/memory-enhance/` 或扩展现有 hook
+
+### E4：置信度演进
+
+| hitCount | confidence |
+| -------- | ---------- |
+| 0        | low        |
+| ≥ 3      | medium     |
+| ≥ 5      | high       |
+| ≥ 10     | proven     |
+
+降级规则：
+
+- 经验命中但 AI 仍被用户纠正 → 说明经验不完整，触发 E5 更新
+- `lastHitAt` 超过 60 天 → confidence 降一级
+- `lastHitAt` 超过 90 天且 confidence 为 low → 标记 `deprecated`
+
+降级检查时机：`session_end` hook 或 `/new` 触发时顺便检查。
+
+### E5：经验内容更新
+
+当经验命中但 AI 仍被用户纠正时，说明经验不完整。
+
+**检测逻辑**（在 `llm_output` hook）：
+
+1. 本轮注入了经验条目 X（从 E3 的追踪记录中获取）
+2. 本轮 AI 仍然被用户纠正（检测纠正性词汇）
+3. 后续轮次成功完成
+
+**更新方式**：
+在下一次 session-memory hook 触发时（/new、/reset），扩展 prompt：
+
+```
+经验条目 "Gateway 重启：先查端口" 在本次对话中被注入，
+但 AI 仍需要用户纠正。原有 conclusion 和本次新的纠正内容如下。
+请输出更新后的 conclusion。
+```
+
+覆盖写入 `conclusion` 字段，更新 `updatedAt`。
+
+### E6：用户主动触发
+
+当用户说"记录"、"整理笔记"、"记住这个"时：
+
+1. 收集当前对话最近 N 轮
+2. 调 LLM 用和 E2 相同的 prompt 提取经验
+3. 写入 `context-books/learned.yaml`
+
+这个功能可以注册为一个新的 CLI 命令或 skill。
+
+## 实施顺序
+
+### 推荐顺序：E1 → E2 → E3 → E6 → E4 → E5
+
+**E1（schema 扩展）+ E2（session-memory hook 扩展）先做**：最核心的创建流程，改动集中在一个文件（session-memory handler），复用已有的 LLM 调用。
+
+**E3（命中追踪）紧接**：让经验有反馈循环，知道哪些被用了。
+
+**E6（用户主动触发）中间做**：给用户直接控制权，不依赖自动检测。
+
+**E4（置信度）+ E5（内容更新）最后做**：生命周期管理，需要积累一定数量的经验后才有意义。
+
+## 验证方案
+
+1. **创建验证**：执行 `/new`，检查 `context-books/learned.yaml` 是否生成了合理的经验条目
+2. **注入验证**：发送包含经验关键词的消息，用 `/context detail` 确认经验条目被注入
+3. **命中追踪验证**：确认 `hitCount` 和 `lastHitAt` 在命中后正确更新
+4. **预算隔离验证**：经验条目不挤占高 `order` 手写条目的预算
+5. **兼容验证**：没有 `learned.yaml` 时，系统行为完全不变
+
+## 涉及的关键文件
+
+| 文件                                          | E1  | E2  | E3  | E4  | E5  | E6  |
+| --------------------------------------------- | --- | --- | --- | --- | --- | --- |
+| `src/agents/context-books.ts`                 | ✓   |     |     |     |     |     |
+| `src/cli/assets-cli.ts`                       | ✓   |     |     |     |     |     |
+| `src/hooks/bundled/session-memory/handler.ts` |     | ✓   |     |     | ✓   |     |
+| `extensions/memory-enhance/` 或新 hook        |     |     | ✓   | ✓   | ✓   | ✓   |
+| workspace `context-books/learned.yaml`        |     | ✓   | ✓   | ✓   | ✓   | ✓   |
