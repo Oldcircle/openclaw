@@ -2,6 +2,18 @@
 
 > AI 每次开始工作前必须读这个文件。完成工作后必须更新。
 
+## 2026-03-19 最新进展
+
+- 已完成一轮 Telegram 真实排障与修复：
+  - 基于 `~/.openclaw/agents/nujida/sessions/*.jsonl.reset.*` 和 `~/.openclaw/logs/gateway.err.log` 定位到 `Message ordering conflict` 的真实触发链
+  - 确认 DeepSeek/openai-compatible 场景下，报错不只是 `Incorrect role information`，还包含 `Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`
+  - 已补“失败轮次尾巴”清理：下一轮开始前会剥离尾部 `user -> assistant(error)` 污染
+  - 已把 `tool/tool_calls` 配对错误统一归类为 message ordering conflict，并接入 auto-reset 处理
+- 本地验证：
+  - Telegram 相关回归 unit 测试通过
+  - 目标 e2e 测试通过
+  - 全量 TypeScript 检查仍被 `extensions/trace-viewer` 既有类型问题阻塞，和本次修复无关
+
 ## 当前进度
 
 | 方向                       | 状态         | 说明                                                                        |

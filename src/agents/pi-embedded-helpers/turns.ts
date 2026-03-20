@@ -154,6 +154,39 @@ function mergeConsecutiveAssistantTurns(
   };
 }
 
+function isFailedAssistantMessage(message: AgentMessage | undefined): boolean {
+  if (!message || typeof message !== "object" || message.role !== "assistant") {
+    return false;
+  }
+  const stopReason = (message as { stopReason?: unknown }).stopReason;
+  return stopReason === "error" || stopReason === "aborted";
+}
+
+/**
+ * Strict providers can leave a failed assistant turn persisted as:
+ *   user -> assistant(stopReason:error|aborted)
+ * Keep that failed span out of the next request so the next user turn can
+ * continue from the last successful assistant/tool boundary.
+ */
+export function stripTrailingFailedAssistantTurn(messages: AgentMessage[]): AgentMessage[] {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return messages;
+  }
+
+  const stripped = messages.slice();
+  let changed = false;
+
+  while (isFailedAssistantMessage(stripped.at(-1))) {
+    stripped.pop();
+    changed = true;
+    if (stripped.at(-1)?.role === "user") {
+      stripped.pop();
+    }
+  }
+
+  return changed ? stripped : messages;
+}
+
 /**
  * Validates and fixes conversation turn sequences for Gemini API.
  * Gemini requires strict alternating user→assistant→tool→user pattern.

@@ -66,6 +66,16 @@ function isReasoningConstraintErrorMessage(raw: string): boolean {
   );
 }
 
+const MESSAGE_ORDERING_CONFLICT_RE =
+  /incorrect role information|roles must alternate|400.*role|"message".*role.*information|messages? with role ['"]tool['"] must be a response to a preceding message with ['"]tool_calls['"]|tool_use ids? found without tool_result blocks?/i;
+
+export function isMessageOrderingConflictErrorMessage(raw?: string | null): boolean {
+  if (!raw) {
+    return false;
+  }
+  return MESSAGE_ORDERING_CONFLICT_RE.test(raw);
+}
+
 function hasRateLimitTpmHint(raw: string): boolean {
   const lower = raw.toLowerCase();
   return /\btpm\b/i.test(lower) || lower.includes("tokens per minute");
@@ -713,11 +723,7 @@ export function formatAssistantErrorText(
   }
 
   // Catch role ordering errors - including JSON-wrapped and "400" prefix variants
-  if (
-    /incorrect role information|roles must alternate|400.*role|"message".*role.*information/i.test(
-      raw,
-    )
-  ) {
+  if (isMessageOrderingConflictErrorMessage(raw)) {
     return (
       "Message ordering conflict - please try again. " +
       "If this persists, use /new to start a fresh session."
@@ -775,7 +781,7 @@ export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boo
   // Only apply error-pattern rewrites when the caller knows this text is an error payload.
   // Otherwise we risk swallowing legitimate assistant text that merely *mentions* these errors.
   if (errorContext) {
-    if (/incorrect role information|roles must alternate/i.test(trimmed)) {
+    if (isMessageOrderingConflictErrorMessage(trimmed)) {
       return (
         "Message ordering conflict - please try again. " +
         "If this persists, use /new to start a fresh session."

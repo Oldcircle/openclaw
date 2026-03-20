@@ -69,6 +69,7 @@ import {
   resolveBootstrapMaxChars,
   resolveBootstrapPromptTruncationWarningMode,
   resolveBootstrapTotalMaxChars,
+  stripTrailingFailedAssistantTurn,
   validateAnthropicTurns,
   validateGeminiTurns,
 } from "../../pi-embedded-helpers.js";
@@ -340,6 +341,72 @@ function stripSessionsYieldArtifacts(activeSession: {
   if (changed) {
     sessionManager._rewriteFile?.();
   }
+}
+
+function stripTrailingFailedTurnArtifacts(activeSession: {
+  messages: AgentMessage[];
+  agent: { replaceMessages: (messages: AgentMessage[]) => void };
+  sessionManager?: unknown;
+}) {
+  const strippedMessages = stripTrailingFailedAssistantTurn(activeSession.messages);
+  const changedMessages = strippedMessages !== activeSession.messages;
+  if (changedMessages) {
+    activeSession.agent.replaceMessages(strippedMessages);
+  }
+
+  const sessionManager = activeSession.sessionManager as
+    | {
+        fileEntries?: Array<{
+          type?: string;
+          id?: string;
+          parentId?: string | null;
+          message?: { role?: string; stopReason?: string };
+        }>;
+        byId?: Map<string, { id: string }>;
+        leafId?: string | null;
+        _rewriteFile?: () => void;
+      }
+    | undefined;
+  const fileEntries = sessionManager?.fileEntries;
+  const byId = sessionManager?.byId;
+  if (!fileEntries || !byId) {
+    return strippedMessages !== activeSession.messages;
+  }
+
+  let changed = false;
+  while (fileEntries.length > 1) {
+    const last = fileEntries.at(-1);
+    const isFailedAssistant =
+      last?.type === "message" &&
+      last.message?.role === "assistant" &&
+      (last.message?.stopReason === "aborted" || last.message?.stopReason === "error");
+    if (!isFailedAssistant) {
+      break;
+    }
+
+    fileEntries.pop();
+    if (last.id) {
+      byId.delete(last.id);
+    }
+    sessionManager.leafId = last.parentId ?? null;
+    changed = true;
+
+    const prev = fileEntries.at(-1);
+    const isFailedUserTurn = prev?.type === "message" && prev.message?.role === "user";
+    if (!isFailedUserTurn) {
+      continue;
+    }
+    fileEntries.pop();
+    if (prev.id) {
+      byId.delete(prev.id);
+    }
+    sessionManager.leafId = prev.parentId ?? null;
+  }
+  if (changed) {
+    sessionManager._rewriteFile?.();
+  }
+
+  return changedMessages || changed;
 }
 
 export function isOllamaCompatProvider(model: {
@@ -2651,7 +2718,9 @@ export async function runEmbeddedAttempt(
 
         log.debug(`embedded run prompt start: runId=${params.runId} sessionId=${params.sessionId}`);
 
-        // Repair orphaned trailing user messages so new prompts don't violate role ordering.
+        // Repair the optimistic inbound user append before the actual prompt runs.
+        // The live transcript may also still end in a failed user->assistant(error)
+        // span from the previous turn, so peel that back to the last successful turn.
         const leafEntry = sessionManager.getLeafEntry();
         if (leafEntry?.type === "message" && leafEntry.message.role === "user") {
           if (leafEntry.parentId) {
@@ -2663,6 +2732,12 @@ export async function runEmbeddedAttempt(
           activeSession.agent.replaceMessages(sessionContext.messages);
           log.warn(
             `Removed orphaned user message to prevent consecutive user turns. ` +
+              `runId=${params.runId} sessionId=${params.sessionId}`,
+          );
+        }
+        if (stripTrailingFailedTurnArtifacts(activeSession)) {
+          log.warn(
+            `Removed trailing failed turn artifacts before prompt. ` +
               `runId=${params.runId} sessionId=${params.sessionId}`,
           );
         }

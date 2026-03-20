@@ -1549,6 +1549,24 @@ describe("runReplyAgent typing (heartbeat)", () => {
     });
   });
 
+  it("returns friendly message for tool/tool_calls ordering errors thrown as exceptions", async () => {
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => {
+      throw new Error(
+        "400 Messages with role 'tool' must be a response to a preceding message with 'tool_calls'",
+      );
+    });
+
+    const { run } = createMinimalRun({});
+    const res = await run();
+
+    expect(res).toMatchObject({
+      text: expect.stringContaining("Message ordering conflict"),
+    });
+    expect(res).toMatchObject({
+      text: expect.not.stringContaining("tool_calls"),
+    });
+  });
+
   it("rewrites Bun socket errors into friendly text", async () => {
     state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => ({
       payloads: [

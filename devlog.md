@@ -111,6 +111,43 @@
 
 ---
 
+## 2026-03-19
+
+### Telegram 排障：Message ordering conflict / tool_calls 历史污染修复
+
+- 核查了真实运行状态与 TG 聊天记录：
+  - `~/.openclaw/logs/gateway.err.log` 在 3/19 多次出现同类报错
+  - `~/.openclaw/agents/nujida/sessions/*.jsonl.reset.*` 里可见大量持久化的空 assistant 错误消息：
+    - `stopReason: "error"`
+    - `content: []`
+    - `errorMessage: "400 Messages with role 'tool' must be a response to a preceding message with 'tool_calls'"`
+- 根因分两层：
+  - provider 真实报错不只包含 `Incorrect role information`，还包含更严格的 `tool` / `tool_calls` 配对错误，但旧逻辑没把这类错误统一归类为 message ordering conflict
+  - 下一轮开始前只会去掉“新追加的 orphaned user”，不会顺手回滚上一次失败轮次留下的 `user -> assistant(error)` 尾巴，导致失败 turn 残留在 session 尾部
+- 修改 `src/agents/pi-embedded-runner/run/attempt.ts`
+  - 新增尾部失败轮次清理：如果 transcript 末尾是 `assistant(stopReason=error|aborted)`，会连同其前一个失败 `user` 一起剥离，回退到上一个成功 turn
+  - 同步清理 live session 与 `sessionManager.fileEntries`，避免只修内存、不修持久化 transcript
+- 修改 `src/agents/pi-embedded-helpers/errors.ts`
+  - 新增统一识别 `Message ordering conflict` 的正则，覆盖：
+    - `Incorrect role information`
+    - `roles must alternate`
+    - `Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`
+    - `tool_use ids found without tool_result blocks`
+- 修改 `src/agents/pi-embedded-runner/run.ts`
+  - openai-compatible provider 返回上述 `tool/tool_calls` 错误时，也走 `role_ordering` 友好错误路径
+- 修改 `src/auto-reply/reply/agent-runner-execution.ts`
+  - 把 `tool/tool_calls` 错误纳入 auto-reset 判定，避免 Telegram 用户反复卡在坏 session 上
+- 新增/更新测试：
+  - `src/agents/pi-embedded-helpers.validate-turns.test.ts`
+  - `src/agents/pi-embedded-helpers.formatassistanterrortext.test.ts`
+  - `src/agents/pi-embedded-helpers.sanitizeuserfacingtext.test.ts`
+  - `src/auto-reply/reply/agent-runner.runreplyagent.e2e.test.ts`
+- 验证结果：
+  - `pnpm exec vitest run src/agents/pi-embedded-helpers.validate-turns.test.ts src/agents/pi-embedded-helpers.formatassistanterrortext.test.ts src/agents/pi-embedded-helpers.sanitizeuserfacingtext.test.ts`
+  - `pnpm exec vitest --config vitest.e2e.config.ts run src/auto-reply/reply/agent-runner.runreplyagent.e2e.test.ts`
+  - 以上通过
+  - `pnpm exec tsc -p tsconfig.json --noEmit` 仍失败，但失败点在 `extensions/trace-viewer/src/collector.ts` 的既有 plugin-sdk 类型导出，不是这次改动引入
+
 ## 2026-03-18
 
 ### P4 批量推进：预算配置化 + 条目生命周期控制

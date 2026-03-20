@@ -48,6 +48,12 @@ describe("formatAssistantErrorText", () => {
     const msg = makeAssistantError('messages: roles must alternate between "user" and "assistant"');
     expect(formatAssistantErrorText(msg)).toContain("Message ordering conflict");
   });
+  it("returns a friendly message for tool/tool_calls ordering conflicts", () => {
+    const msg = makeAssistantError(
+      "400 Messages with role 'tool' must be a response to a preceding message with 'tool_calls'",
+    );
+    expect(formatAssistantErrorText(msg)).toContain("Message ordering conflict");
+  });
   it("returns a friendly message for Anthropic overload errors", () => {
     const msg = makeAssistantError(
       '{"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_123"}',

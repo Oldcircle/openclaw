@@ -11,6 +11,7 @@ import {
   isContextOverflowError,
   isBillingErrorMessage,
   isLikelyContextOverflowError,
+  isMessageOrderingConflictErrorMessage,
   isTransientHttpError,
   sanitizeUserFacingText,
 } from "../../agents/pi-embedded-helpers.js";
@@ -524,7 +525,7 @@ export async function runAgentTurnWithFallback(params: {
       const isContextOverflow = !isBilling && isLikelyContextOverflowError(message);
       const isCompactionFailure = !isBilling && isCompactionFailureError(message);
       const isSessionCorruption = /function call turn comes immediately after/i.test(message);
-      const isRoleOrderingError = /incorrect role information|roles must alternate/i.test(message);
+      const isRoleOrderingError = isMessageOrderingConflictErrorMessage(message);
       const isTransientHttp = isTransientHttpError(message);
 
       if (

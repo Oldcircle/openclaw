@@ -23,6 +23,7 @@ export {
   isModelNotFoundErrorMessage,
   isBillingAssistantError,
   extractObservedOverflowTokenCount,
+  isMessageOrderingConflictErrorMessage,
   parseApiErrorInfo,
   sanitizeUserFacingText,
   isBillingErrorMessage,
@@ -63,6 +64,7 @@ export {
 export { pickFallbackThinkingLevel } from "./pi-embedded-helpers/thinking.js";
 
 export {
+  stripTrailingFailedAssistantTurn,
   mergeConsecutiveUserTurns,
   validateAnthropicTurns,
   validateGeminiTurns,

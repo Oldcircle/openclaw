@@ -27,6 +27,14 @@ describe("sanitizeUserFacingText", () => {
     expect(result).toContain("Message ordering conflict");
   });
 
+  it("sanitizes tool/tool_calls ordering errors", () => {
+    const result = sanitizeUserFacingText(
+      "400 Messages with role 'tool' must be a response to a preceding message with 'tool_calls'",
+      { errorContext: true },
+    );
+    expect(result).toContain("Message ordering conflict");
+  });
+
   it("sanitizes HTTP status errors with error hints", () => {
     expect(sanitizeUserFacingText("500 Internal Server Error", { errorContext: true })).toBe(
       "HTTP 500: Internal Server Error",

@@ -2,6 +2,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { describe, expect, it } from "vitest";
 import {
   mergeConsecutiveUserTurns,
+  stripTrailingFailedAssistantTurn,
   validateAnthropicTurns,
   validateGeminiTurns,
 } from "./pi-embedded-helpers.js";
@@ -310,6 +311,31 @@ describe("validateAnthropicTurns", () => {
     expect(result[2].role).toBe("user");
     const lastContent = (result[2] as { content: unknown[] }).content;
     expect(lastContent).toHaveLength(2);
+  });
+});
+
+describe("stripTrailingFailedAssistantTurn", () => {
+  it("removes a trailing failed user->assistant(error) span", () => {
+    const msgs = asMessages([
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop" },
+      { role: "user", content: "retry me" },
+      { role: "assistant", content: [], stopReason: "error", errorMessage: "boom" },
+    ]);
+
+    expect(stripTrailingFailedAssistantTurn(msgs)).toEqual([
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop" },
+    ]);
+  });
+
+  it("leaves successful tails unchanged", () => {
+    const msgs = asMessages([
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop" },
+    ]);
+
+    expect(stripTrailingFailedAssistantTurn(msgs)).toEqual(msgs);
   });
 });
 
