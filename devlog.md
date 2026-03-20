@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-03-20
+
+### 修复 at_depth 注入打断工具调用链（上游 bug）
+
+**问题**：TG 对话中每次发消息都报 "Message ordering conflict"（DeepSeek 400: `Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`）。
+
+**根因**：`injectAtDepthContextBookMessages()` 按 `baseLength - depth` 直接算插入位置，**完全没考虑工具调用区间**。当 `depth_prompt(depth=2)` 或 Prompt Profile `at_depth` 模块的目标位置恰好落在多轮工具链内部时：
+
+```
+assistant(toolUse) → toolResult → [USER 被插在这里] → assistant(toolUse) → toolResult → assistant(stop)
+```
+
+插入的 `user` 消息打断了 `tool_calls/tool` 配对，DeepSeek/OpenAI 兼容 API 拒绝请求。
+
+**这是上游 bug**——`injectAtDepthContextBookMessages` 从未处理过工具调用区间的安全边界。二开的 depth_prompt + at_depth Prompt Profile 配置暴露了这个问题。
+
+**修复**：
+
+- 新增 `findSafeInsertionIndex(messages, targetIndex)`
+- 计算完目标位置后，检查是否在工具链内部（`assistant(toolUse) → toolResult` 序列）
+- 如果是，向前回退到工具链起始的 `assistant(toolUse)` 之前
+- 完整工具链可能跨越多个回合，全部跳过
+
+**修改文件**：`src/agents/pi-embedded-runner/run/attempt.ts`
+
+---
+
 ## 2026-03-19
 
 ### 第三阶段：经验资产 E1-E3 + 经验触发修复

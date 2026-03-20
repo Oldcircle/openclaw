@@ -120,7 +120,16 @@
 - ~~`loadAgentCardDocument` 返回 `[]` 导致 Agent Card 静默失效~~ → 已修复（3/17，`return []` → `return null`）
 - `/context detail` 报告中 Agent Card 替代的文件只显示 name 不显示来源路径，不够直观（低优先级）
 
-## 最新进展（2026-03-19）
+## 最新进展（2026-03-20）
+
+### 3/20: 修复 at_depth 注入打断工具调用链导致 DeepSeek 400 错误
+
+- **问题**：每次发消息都显示 "Message ordering conflict"，即使 `/new` 后第二轮对话就复现
+- **根因（上游 bug）**：`injectAtDepthContextBookMessages()` 按 depth 计算插入位置时，没有避开工具调用链。当 depth_prompt 或 Prompt Profile at_depth 模块恰好落在工具链中间时，插入的 `user` 消息打断了 `tool_calls/tool` 配对，DeepSeek 拒绝请求
+- **修复**：新增 `findSafeInsertionIndex()`，插入前向后回退到工具链起始位置之前
+- 修改文件：`src/agents/pi-embedded-runner/run/attempt.ts`
+
+## 之前进展（2026-03-19）
 
 ### 3/19: 经验触发修复 + E3 hitCount 追踪
 

@@ -1330,15 +1330,22 @@ export function injectAtDepthContextBookMessages(params: {
   const nextMessages = params.messages.slice();
   const baseLength = params.messages.length;
   const insertions = params.entries
-    .map((entry, index) => ({
-      index,
-      baseIndex: Math.max(0, Math.min(baseLength, baseLength - Math.max(0, entry.depth))),
-      message: {
-        role: "user" as const,
-        content: `${CONTEXT_BOOK_AT_DEPTH_MARKER} name="${entry.name}" depth="${entry.depth}">\n${entry.content}\n</openclaw_context_book_depth>`,
-        timestamp: Date.now() + index,
-      } as AgentMessage,
-    }))
+    .map((entry, index) => {
+      let baseIndex = Math.max(0, Math.min(baseLength, baseLength - Math.max(0, entry.depth)));
+      // Avoid inserting inside a tool call span (assistant(toolUse) → toolResult+).
+      // Walk backward to find a safe boundary: before the assistant(toolUse) that
+      // starts the current tool span, so we don't break tool_calls/tool pairing.
+      baseIndex = findSafeInsertionIndex(params.messages, baseIndex);
+      return {
+        index,
+        baseIndex,
+        message: {
+          role: "user" as const,
+          content: `${CONTEXT_BOOK_AT_DEPTH_MARKER} name="${entry.name}" depth="${entry.depth}">\n${entry.content}\n</openclaw_context_book_depth>`,
+          timestamp: Date.now() + index,
+        } as AgentMessage,
+      };
+    })
     .toSorted((a, b) => {
       if (a.baseIndex !== b.baseIndex) {
         return a.baseIndex - b.baseIndex;
@@ -1352,6 +1359,54 @@ export function injectAtDepthContextBookMessages(params: {
     inserted += 1;
   }
   return nextMessages;
+}
+
+/**
+ * Find a safe insertion index that does not land inside a tool call chain.
+ * A tool call chain may span multiple rounds:
+ *   assistant(toolUse) → toolResult → assistant(toolUse) → toolResult → assistant(stop)
+ * Inserting a user message anywhere inside this chain breaks tool_calls/tool pairing
+ * for OpenAI-compatible providers (DeepSeek, etc.).
+ * This function walks backward to find the boundary before the chain starts.
+ */
+function findSafeInsertionIndex(messages: AgentMessage[], targetIndex: number): number {
+  if (targetIndex <= 0 || targetIndex >= messages.length) {
+    return targetIndex;
+  }
+  let idx = targetIndex;
+  while (idx > 0) {
+    const prev = messages[idx - 1];
+    if (!prev || typeof prev !== "object") {
+      break;
+    }
+    const role = (prev as { role?: string }).role;
+    const stopReason = (prev as { stopReason?: string }).stopReason;
+    if (role === "toolResult") {
+      idx--;
+      continue;
+    }
+    if (role === "assistant" && (stopReason === "toolUse" || stopReason === "tool_use")) {
+      idx--;
+      continue;
+    }
+    // assistant(stop) inside a chain: check if the message before it is a toolResult
+    // (which means this assistant is the final response after tools, still part of the chain)
+    if (role === "assistant" && stopReason !== "toolUse" && stopReason !== "tool_use" && idx >= 2) {
+      const beforePrev = messages[idx - 2];
+      if (
+        beforePrev &&
+        typeof beforePrev === "object" &&
+        (beforePrev as { role?: string }).role === "toolResult"
+      ) {
+        // This assistant(stop) follows a toolResult — it's the tail of the chain.
+        // Don't retreat further; the safe boundary is before the chain start,
+        // which we already passed through in previous iterations.
+        break;
+      }
+    }
+    break;
+  }
+  return idx;
 }
 
 export function stripAtDepthContextBookMessages(messages: AgentMessage[]): AgentMessage[] {
